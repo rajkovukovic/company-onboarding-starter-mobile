@@ -1,0 +1,27 @@
+node_modules/
+.env
+.env.local
+.DS_Store
+
+# Build outputs
+dist/
+build/
+
+# Expo
+.expo/
+.expo-shared/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+web-build/
+ios/
+android/
+
+# Logs
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+*.log

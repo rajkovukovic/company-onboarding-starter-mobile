@@ -1,0 +1,15 @@
+{
+  "name": "company-onboarding-starter-mobile",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -n backend,mobile -c blue,magenta \"npm run dev:backend\" \"npm run dev:mobile\"",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:mobile": "cd mobile && npm run start",
+    "install:all": "npm install && cd backend && npm install && cd ../mobile && npm install",
+    "typecheck": "cd backend && npx tsc --noEmit && cd ../mobile && npm run typecheck"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
