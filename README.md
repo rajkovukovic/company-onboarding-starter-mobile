@@ -30,20 +30,24 @@ npm run install:all
 
 ## Run
 
+Pick the command for your target:
+
 ```bash
-npm run dev
+npm run dev:ios       # backend + Expo, auto-opens the iOS Simulator
+npm run dev:android   # backend + Expo, auto-opens the Android Emulator
+npm run dev           # backend + Expo, scan the QR code with Expo Go on your phone
 ```
 
-This starts:
+Each starts:
 
 - Backend at `http://localhost:3001`
-- Expo dev server, which prints a QR code and platform shortcuts
+- Expo dev server (for `npm run dev`, it prints a QR code — phone must be on
+  the same WiFi)
 
-Then either:
-
-- Press `i` in the Expo terminal → opens the iOS Simulator
-- Press `a` in the Expo terminal → opens the Android Emulator
-- Scan the QR code with Expo Go on your phone (phone must be on the same WiFi)
+> Note: Expo's interactive keyboard shortcuts (`i`, `a`, `r`) don't work under
+> the combined scripts because `concurrently` doesn't forward keystrokes. Use
+> the platform-specific commands above, or run `npm run dev:backend` and
+> `npm run dev:mobile` in separate terminals if you want the interactive menu.
 
 ### Networking notes
 

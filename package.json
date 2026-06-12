@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "concurrently -n backend,mobile -c blue,magenta \"npm run dev:backend\" \"npm run dev:mobile\"",
+    "dev:ios": "concurrently -n backend,mobile -c blue,magenta \"npm run dev:backend\" \"cd mobile && npm run ios\"",
+    "dev:android": "concurrently -n backend,mobile -c blue,magenta \"npm run dev:backend\" \"cd mobile && npm run android\"",
     "dev:backend": "cd backend && npm run dev",
     "dev:mobile": "cd mobile && npm run start",
     "install:all": "npm install && cd backend && npm install && cd ../mobile && npm install",
