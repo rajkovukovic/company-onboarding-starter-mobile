@@ -241,6 +241,7 @@ function OnboardingFlow() {
             <ReviewStep
               company={editedCompany}
               enrichment={result.enrichment.fields}
+              warnings={result.enrichment.warnings}
               onChangeCompany={setEditedCompany}
               onConfirm={handleReviewConfirm}
             />

@@ -448,3 +448,110 @@ test('uses a configured Companies House base URL', async () => {
     assert.equal(response.body.company.registrationNumber, '12345678');
   });
 });
+
+test('warns when a personal email domain is used', async () => {
+  mockWebsitePage(
+    'https://acme.co.uk/',
+    '<html><head><title>Acme</title></head></html>'
+  );
+
+  await withApp(async (baseUrl) => {
+    const response = await postJson(baseUrl, {
+      email: 'founder@gmail.com',
+      website: 'acme.co.uk',
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.match(
+      response.body.enrichment.warnings[0],
+      /Personal email domains are less reliable/
+    );
+    assert.equal(response.body.company.name, 'Acme');
+  });
+});
+
+test('warns when email and website domains do not match', async () => {
+  mockWebsitePage(
+    'https://acme.co.uk/',
+    '<html><head><title>Acme</title></head></html>'
+  );
+
+  await withApp(async (baseUrl) => {
+    const response = await postJson(baseUrl, {
+      email: 'founder@other-company.co.uk',
+      website: 'acme.co.uk',
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.match(
+      response.body.enrichment.warnings[0],
+      /does not match website domain/
+    );
+    assert.equal(response.body.company.name, 'Acme');
+  });
+});
+
+test('warns when Companies House has multiple plausible matches', async () => {
+  process.env.COMPANIES_HOUSE_API_KEY = 'test-key';
+  mockCompaniesHouse({
+    'https://acme.co.uk/': '<html><head><title>Acme</title></head></html>',
+    '/search/companies?q=acme&items_per_page=5': {
+      items: [
+        {
+          title: 'ACME LIMITED',
+          company_number: '12345678',
+        },
+        {
+          title: 'ACME SERVICES LIMITED',
+          company_number: '87654321',
+        },
+      ],
+    },
+    '/company/12345678': {
+      company_name: 'ACME LIMITED',
+      company_number: '12345678',
+    },
+  });
+
+  await withApp(async (baseUrl) => {
+    const response = await postJson(baseUrl, {
+      email: 'founder@acme.co.uk',
+      website: 'acme.co.uk',
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.body.company.registrationNumber, '12345678');
+    assert.ok(
+      response.body.enrichment.warnings.some((warning: string) =>
+        warning.includes('Multiple Companies House matches found')
+      )
+    );
+  });
+});
+
+test('adds a wrong-environment hint when a configured Companies House host rejects auth', async () => {
+  process.env.COMPANIES_HOUSE_API_KEY = 'test-key';
+  process.env.COMPANIES_HOUSE_BASE_URL =
+    'https://api-sandbox.company-information.service.gov.uk';
+  mockFetch({
+    'https://acme.co.uk/': '<html><head><title>Acme</title></head></html>',
+    '/search/companies?q=acme&items_per_page=5': {
+      status: 401,
+      body: { error: 'unauthorised' },
+    },
+  });
+
+  await withApp(async (baseUrl) => {
+    const response = await postJson(baseUrl, {
+      email: 'founder@acme.co.uk',
+      website: 'acme.co.uk',
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.match(
+      response.body.enrichment.warnings.at(-1),
+      /COMPANIES_HOUSE_BASE_URL matches the API key environment/
+    );
+    assert.equal(response.body.company.name, 'Acme');
+  });
+});

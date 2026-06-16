@@ -9,14 +9,28 @@ import { ReviewField } from './ReviewField';
 export function ReviewStep(props: {
   company: CompanyData;
   enrichment: EnrichResponse['enrichment']['fields'];
+  warnings?: string[];
   onChangeCompany: (company: CompanyData) => void;
   onConfirm: () => void;
 }) {
+  const warnings = props.warnings?.filter(Boolean) ?? [];
+
   return (
     <View>
       <Text style={styles.subtitle}>
         We've pulled this in for you. Check it over before continuing.
       </Text>
+
+      {warnings.length > 0 ? (
+        <View style={styles.warningBox}>
+          <Text style={styles.warningTitle}>Needs a quick check</Text>
+          {warnings.map((warning) => (
+            <Text key={warning} style={styles.warningText}>
+              {warning}
+            </Text>
+          ))}
+        </View>
+      ) : null}
 
       <View style={styles.reviewList}>
         {REVIEW_FIELDS.map((field) => {

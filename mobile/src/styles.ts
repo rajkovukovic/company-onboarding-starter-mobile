@@ -74,6 +74,25 @@ export const styles = StyleSheet.create({
     borderRadius: 10,
   },
   errorText: { color: '#b91c1c' },
+  warningBox: {
+    marginBottom: 16,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#fcd34d',
+    backgroundColor: '#fffbeb',
+    borderRadius: 8,
+    gap: 6,
+  },
+  warningTitle: {
+    color: '#92400e',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  warningText: {
+    color: '#78350f',
+    fontSize: 13,
+    lineHeight: 18,
+  },
   reviewList: { gap: 12, marginBottom: 16 },
   reviewField: {
     backgroundColor: '#fff',

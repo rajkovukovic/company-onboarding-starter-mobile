@@ -17,6 +17,7 @@ function resolveApiUrl(): string {
 }
 
 export const API_URL = resolveApiUrl();
+const ENRICH_TIMEOUT_MS = 10000;
 
 async function readErrorMessage(response: Response): Promise<string> {
   try {
@@ -35,15 +36,37 @@ export async function enrich(input: {
   email: string;
   website: string;
 }): Promise<EnrichResponse> {
-  const response = await fetch(`${API_URL}/enrich`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(input),
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), ENRICH_TIMEOUT_MS);
 
-  if (!response.ok) {
-    throw new Error(await readErrorMessage(response));
+  try {
+    const response = await fetch(`${API_URL}/enrich`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(await readErrorMessage(response));
+    }
+
+    try {
+      return (await response.json()) as EnrichResponse;
+    } catch {
+      throw new Error('The server returned an unexpected response. Please try again.');
+    }
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error('The enrichment request timed out. Please try again.');
+    }
+
+    if (error instanceof TypeError) {
+      throw new Error('Could not reach the backend. Check your connection and API URL.');
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeout);
   }
-
-  return response.json();
 }

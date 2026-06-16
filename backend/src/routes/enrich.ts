@@ -77,6 +77,31 @@ const GENERIC_TITLE_PARTS = new Set([
   'welcome',
   'official website',
 ]);
+const PERSONAL_EMAIL_DOMAINS = new Set([
+  'aol.com',
+  'gmail.com',
+  'googlemail.com',
+  'hotmail.com',
+  'icloud.com',
+  'live.com',
+  'me.com',
+  'msn.com',
+  'outlook.com',
+  'proton.me',
+  'protonmail.com',
+  'yahoo.com',
+  'yahoo.co.uk',
+]);
+
+class CompaniesHouseRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status?: number
+  ) {
+    super(message);
+    this.name = 'CompaniesHouseRequestError';
+  }
+}
 
 /**
  * Converts user-entered website text into a stable HTTPS URL and hostname.
@@ -137,6 +162,19 @@ function titleCaseCompanyName(value: string): string {
 
 function companyNameFromDomain(domain: string): string {
   return titleCaseCompanyName(companySearchTermFromDomain(domain));
+}
+
+function domainFromEmail(email: string): string {
+  const parts = email.trim().split('@');
+  return parts[parts.length - 1]?.toLowerCase() ?? '';
+}
+
+function domainsAppearRelated(emailDomain: string, websiteDomain: string) {
+  return (
+    emailDomain === websiteDomain ||
+    emailDomain.endsWith(`.${websiteDomain}`) ||
+    websiteDomain.endsWith(`.${emailDomain}`)
+  );
 }
 
 /**
@@ -217,6 +255,10 @@ async function fetchCompanyWebsiteMetadata(website: string) {
     });
 
     if (!response.ok) {
+      if (response.status === 401 || response.status === 403) {
+        throw new Error(`company website blocked access with ${response.status}`);
+      }
+
       throw new Error(`company website returned ${response.status}`);
     }
 
@@ -230,6 +272,12 @@ async function fetchCompanyWebsiteMetadata(website: string) {
       extractMetaContent(html, 'property', 'og:description');
 
     return { name, description };
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`company website timed out after ${WEBSITE_FETCH_TIMEOUT_MS}ms`);
+    }
+
+    throw error;
   } finally {
     clearTimeout(timeout);
   }
@@ -303,7 +351,10 @@ async function getCompaniesHouse<T>(path: string): Promise<T> {
   });
 
   if (!response.ok) {
-    throw new Error(`Companies House returned ${response.status}`);
+    throw new CompaniesHouseRequestError(
+      `Companies House returned ${response.status}`,
+      response.status
+    );
   }
 
   return response.json() as Promise<T>;
@@ -435,6 +486,17 @@ router.post('/', async (req: Request<{}, {}, EnrichRequest>, res: Response) => {
   };
 
   const searchTerm = companySearchTermFromDomain(normalizedWebsite.domain);
+  const emailDomain = domainFromEmail(email);
+
+  if (PERSONAL_EMAIL_DOMAINS.has(emailDomain)) {
+    response.enrichment.warnings?.push(
+      'Personal email domains are less reliable for company matching; please review the company details carefully.'
+    );
+  } else if (!domainsAppearRelated(emailDomain, normalizedWebsite.domain)) {
+    response.enrichment.warnings?.push(
+      `Email domain "${emailDomain}" does not match website domain "${normalizedWebsite.domain}"; please confirm this is the right company.`
+    );
+  }
 
   await enrichFromCompanyWebsite(response, normalizedWebsite);
 
@@ -449,12 +511,25 @@ router.post('/', async (req: Request<{}, {}, EnrichRequest>, res: Response) => {
       }))
       .sort((a, b) => b.match.score - a.match.score);
     const bestMatch = rankedMatches[0];
+    const nextMatch = rankedMatches[1];
 
     if (!bestMatch || bestMatch.match.score === 0 || !bestMatch.item.company_number) {
       response.enrichment.warnings?.push(
         `No usable Companies House match found for "${searchTerm}"`
       );
       return res.json(response);
+    }
+
+    if (nextMatch && nextMatch.match.score > 0) {
+      response.enrichment.warnings?.push(
+        `Multiple Companies House matches found for "${searchTerm}"; using "${bestMatch.item.title ?? bestMatch.item.company_number}" as the best match.`
+      );
+    }
+
+    if (bestMatch.match.confidence !== 'high') {
+      response.enrichment.warnings?.push(
+        `Companies House match confidence is ${bestMatch.match.confidence}; please verify the registry details before continuing.`
+      );
     }
 
     const profile = await getCompaniesHouse<CompaniesHouseCompanyProfile>(
@@ -536,8 +611,15 @@ router.post('/', async (req: Request<{}, {}, EnrichRequest>, res: Response) => {
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
+    const isAuthError =
+      error instanceof CompaniesHouseRequestError &&
+      (error.status === 401 || error.status === 403);
+    const configuredBaseUrl = process.env.COMPANIES_HOUSE_BASE_URL?.trim();
+
     response.enrichment.warnings?.push(
-      `Companies House unavailable: ${message}`
+      isAuthError && configuredBaseUrl
+        ? `${message}. Check whether COMPANIES_HOUSE_BASE_URL matches the API key environment.`
+        : `Companies House unavailable: ${message}`
     );
   }
 
