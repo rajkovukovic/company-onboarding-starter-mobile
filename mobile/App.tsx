@@ -53,6 +53,7 @@ function OnboardingFlow() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [hasRestoredState, setHasRestoredState] = useState(false);
+  const scrollViewRef = useRef<ScrollView>(null);
   const submittingRef = useRef(false);
   const savingRef = useRef(false);
   const persistencePromiseRef = useRef<Promise<void>>(Promise.resolve());
@@ -100,6 +101,14 @@ function OnboardingFlow() {
         }),
       );
   }, [editedCompany, email, hasRestoredState, result, step, website]);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      scrollViewRef.current?.scrollTo({ x: 0, y: 0, animated: false });
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [step]);
 
   const handleSubmit = async () => {
     if (submittingRef.current) return;
@@ -208,6 +217,7 @@ function OnboardingFlow() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView
+          ref={scrollViewRef}
           contentContainerStyle={[
             styles.scroll,
             {
