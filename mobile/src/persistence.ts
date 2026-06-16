@@ -2,7 +2,7 @@ import Storage from 'expo-sqlite/kv-store';
 
 import type { CompanyData, EnrichResponse } from './types';
 
-export type PersistedStep = 'input' | 'review';
+export type PersistedStep = 'input' | 'review' | 'confirm';
 
 export type PersistedOnboardingState = {
   version: 1;
@@ -11,6 +11,7 @@ export type PersistedOnboardingState = {
   website: string;
   result: EnrichResponse | null;
   editedCompany: CompanyData;
+  saved: boolean;
 };
 
 const ONBOARDING_STORAGE_KEY = 'company-onboarding:v1';
@@ -20,7 +21,7 @@ function isObject(value: unknown): value is Record<string, unknown> {
 }
 
 function isPersistedStep(value: unknown): value is PersistedStep {
-  return value === 'input' || value === 'review';
+  return value === 'input' || value === 'review' || value === 'confirm';
 }
 
 function parsePersistedState(value: unknown): PersistedOnboardingState | null {
@@ -40,7 +41,7 @@ function parsePersistedState(value: unknown): PersistedOnboardingState | null {
     return null;
   }
 
-  if (value.step === 'review' && value.result === null) {
+  if ((value.step === 'review' || value.step === 'confirm') && value.result === null) {
     return null;
   }
 
@@ -51,6 +52,7 @@ function parsePersistedState(value: unknown): PersistedOnboardingState | null {
     website: value.website,
     result: value.result as EnrichResponse | null,
     editedCompany: value.editedCompany as CompanyData,
+    saved: value.saved === true,
   };
 }
 

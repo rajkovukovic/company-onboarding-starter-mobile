@@ -91,6 +91,7 @@ function OnboardingFlow() {
         setResult(persistedState.result);
         setEditedCompany(persistedState.editedCompany);
         setActiveStep(persistedState.step);
+        setSaved(persistedState.saved);
       }
 
       setHasRestoredState(true);
@@ -106,7 +107,7 @@ function OnboardingFlow() {
   }, []);
 
   useEffect(() => {
-    if (!hasRestoredState || activeStep === "confirm") return;
+    if (!hasRestoredState) return;
 
     persistencePromiseRef.current = persistencePromiseRef.current
       .catch(() => undefined)
@@ -118,9 +119,10 @@ function OnboardingFlow() {
           website,
           result,
           editedCompany,
+          saved,
         }),
       );
-  }, [editedCompany, email, hasRestoredState, result, activeStep, website]);
+  }, [editedCompany, email, hasRestoredState, result, activeStep, website, saved]);
 
   const navigateTo = useCallback(
     (newStep: Step) => {
@@ -220,8 +222,6 @@ function OnboardingFlow() {
     setSaving(true);
     try {
       await new Promise((resolve) => setTimeout(resolve, 350));
-      await persistencePromiseRef.current.catch(() => undefined);
-      await clearPersistedOnboardingState();
       if (confirmedResult) {
         setResult(confirmedResult);
       }
