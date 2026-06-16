@@ -74,6 +74,8 @@ export function formatSources(metadata?: FieldEnrichment): string {
     : 'No source returned';
 }
 
-export function formatConfidence(metadata?: FieldEnrichment): string {
-  return metadata ? metadata.confidence : 'unknown';
+export function getConfidenceLevel(
+  metadata?: FieldEnrichment,
+): 'high' | 'medium' | 'low' | undefined {
+  return metadata?.confidence;
 }

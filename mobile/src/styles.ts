@@ -52,6 +52,10 @@ export const styles = StyleSheet.create({
     fontSize: 16,
     minHeight: 50,
   },
+  inputMultiline: {
+    minHeight: 50,
+    textAlignVertical: 'top',
+  },
   button: {
     backgroundColor: '#2563eb',
     borderRadius: 10,
@@ -113,9 +117,13 @@ export const styles = StyleSheet.create({
   groupedReviewField: {
     gap: 0,
   },
-  lowConfidence: {
-    borderColor: '#f59e0b',
-    backgroundColor: '#fffbeb',
+  reviewFieldError: {
+    borderColor: '#ef4444',
+  },
+  fieldErrorText: {
+    color: '#dc2626',
+    fontSize: 12,
+    marginTop: 4,
   },
   reviewFieldHeader: {
     flexDirection: 'row',
@@ -124,20 +132,65 @@ export const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 6,
   },
-  confidenceBadge: {
-    overflow: 'hidden',
+  confidenceContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  confidencePillMedium: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
     borderRadius: 999,
-    paddingHorizontal: 9,
+    paddingHorizontal: 8,
     paddingVertical: 4,
-    backgroundColor: '#eef2ff',
-    color: '#3730a3',
+    backgroundColor: '#fef3c7',
+  },
+  confidencePillLow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: '#fee2e2',
+  },
+  confidenceMeter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  confidenceDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  confidenceDotHighActive: {
+    backgroundColor: '#9ca3af',
+  },
+  confidenceDotMediumActive: {
+    backgroundColor: '#d97706',
+  },
+  confidenceDotLowActive: {
+    backgroundColor: '#dc2626',
+  },
+  confidenceDotInactive: {
+    backgroundColor: '#e5e7eb',
+  },
+  confidenceLabelHigh: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#9ca3af',
+  },
+  confidenceLabelMedium: {
     fontSize: 12,
     fontWeight: '700',
-    textTransform: 'capitalize',
-  },
-  lowConfidenceBadge: {
-    backgroundColor: '#fef3c7',
     color: '#92400e',
+  },
+  confidenceLabelLow: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#991b1b',
   },
   metadataRow: { marginTop: 8, gap: 4 },
   metadataText: { color: '#4b5563', fontSize: 12 },

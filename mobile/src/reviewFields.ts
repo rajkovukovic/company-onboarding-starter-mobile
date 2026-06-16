@@ -15,6 +15,8 @@ export type ReviewFieldConfig = {
   label: string;
   placeholder: string;
   keyboardType?: 'default' | 'numbers-and-punctuation';
+  multiline?: boolean;
+  required?: boolean;
 };
 
 export const REVIEW_FIELDS: ReviewFieldConfig[] = [
@@ -23,30 +25,37 @@ export const REVIEW_FIELDS: ReviewFieldConfig[] = [
     metadataKey: 'name',
     label: 'Company name',
     placeholder: 'Company name',
+    multiline: true,
+    required: true,
   },
   {
     key: 'registrationNumber',
     metadataKey: 'registrationNumber',
     label: 'Registration number',
     placeholder: 'Registration number',
+    required: true,
   },
   {
     key: 'registeredAddress.line1',
     metadataKey: 'registeredAddress',
     label: 'Registered address line 1',
     placeholder: 'Address line 1',
+    multiline: true,
+    required: true,
   },
   {
     key: 'registeredAddress.line2',
     metadataKey: 'registeredAddress',
     label: 'Registered address line 2',
     placeholder: 'Address line 2',
+    multiline: true,
   },
   {
     key: 'registeredAddress.city',
     metadataKey: 'registeredAddress',
     label: 'City',
     placeholder: 'City',
+    required: true,
   },
   {
     key: 'registeredAddress.region',
@@ -60,12 +69,14 @@ export const REVIEW_FIELDS: ReviewFieldConfig[] = [
     label: 'Postal code',
     placeholder: 'Postal code',
     keyboardType: 'numbers-and-punctuation',
+    required: true,
   },
   {
     key: 'registeredAddress.country',
     metadataKey: 'registeredAddress',
     label: 'Country',
     placeholder: 'Country',
+    required: true,
   },
   {
     key: 'incorporationDate',
@@ -73,24 +84,28 @@ export const REVIEW_FIELDS: ReviewFieldConfig[] = [
     label: 'Incorporation date',
     placeholder: 'YYYY-MM-DD',
     keyboardType: 'numbers-and-punctuation',
+    required: true,
   },
   {
     key: 'companyType',
     metadataKey: 'companyType',
     label: 'Company type',
     placeholder: 'Company type',
+    required: true,
   },
   {
     key: 'industry',
     metadataKey: 'industry',
     label: 'Industry',
     placeholder: 'Industry',
+    required: true,
   },
   {
     key: 'status',
     metadataKey: 'status',
     label: 'Status',
     placeholder: 'Status',
+    required: true,
   },
 ];
 

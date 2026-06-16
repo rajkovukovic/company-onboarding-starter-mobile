@@ -1,9 +1,10 @@
 import { Text, TextInput, View } from 'react-native';
 
-import { formatConfidence, formatSources } from '../company';
+import { formatSources } from '../company';
 import { styles } from '../styles';
 import type { ReviewFieldConfig } from '../reviewFields';
 import type { FieldEnrichment } from '../types';
+import { ConfidenceIndicator } from './ConfidenceIndicator';
 
 export function ReviewField(props: {
   config: ReviewFieldConfig;
@@ -12,28 +13,26 @@ export function ReviewField(props: {
   onChange: (value: string) => void;
   grouped?: boolean;
   showMetadata?: boolean;
+  hasError?: boolean;
 }) {
-  const isLowConfidence = props.metadata?.confidence === 'low';
   const showMetadata = props.showMetadata ?? true;
 
   return (
     <View
       style={[
         props.grouped ? styles.groupedReviewField : styles.reviewField,
-        !props.grouped && isLowConfidence && styles.lowConfidence,
+        !props.grouped && props.hasError && styles.reviewFieldError,
       ]}
     >
       <View style={styles.reviewFieldHeader}>
-        <Text style={styles.label}>{props.config.label}</Text>
+        <Text style={styles.label}>
+          {props.config.label}
+          {props.config.required ? (
+            <Text style={styles.fieldErrorText}>{' *'}</Text>
+          ) : null}
+        </Text>
         {showMetadata ? (
-          <Text
-            style={[
-              styles.confidenceBadge,
-              isLowConfidence && styles.lowConfidenceBadge,
-            ]}
-          >
-            {formatConfidence(props.metadata)}
-          </Text>
+          <ConfidenceIndicator confidence={props.metadata?.confidence} />
         ) : null}
       </View>
 
@@ -44,9 +43,15 @@ export function ReviewField(props: {
         autoCapitalize="words"
         autoCorrect={false}
         keyboardType={props.config.keyboardType ?? 'default'}
-        returnKeyType="next"
-        style={styles.input}
+        returnKeyType={props.config.multiline ? 'default' : 'next'}
+        multiline={props.config.multiline}
+        scrollEnabled={false}
+        style={[styles.input, props.config.multiline && styles.inputMultiline]}
       />
+
+      {props.hasError ? (
+        <Text style={styles.fieldErrorText}>This field is required.</Text>
+      ) : null}
 
       {showMetadata ? (
         <View style={styles.metadataRow}>

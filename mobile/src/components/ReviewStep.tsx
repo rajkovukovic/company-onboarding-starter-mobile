@@ -1,7 +1,7 @@
+import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import {
-  formatConfidence,
   formatSources,
   getCompanyFieldValue,
   updateCompanyField,
@@ -9,6 +9,7 @@ import {
 import { REGISTERED_ADDRESS_FIELDS, REVIEW_FIELDS } from '../reviewFields';
 import { styles } from '../styles';
 import type { CompanyData, EnrichResponse } from '../types';
+import { ConfidenceIndicator } from './ConfidenceIndicator';
 import { ReviewField } from './ReviewField';
 
 export function ReviewStep(props: {
@@ -18,28 +19,34 @@ export function ReviewStep(props: {
   onChangeCompany: (company: CompanyData) => void;
   onConfirm: () => void;
 }) {
+  const [submitted, setSubmitted] = useState(false);
   const warnings = props.warnings?.filter(Boolean) ?? [];
   const registeredAddressMetadata = props.enrichment.registeredAddress;
-  const isRegisteredAddressLowConfidence =
-    registeredAddressMetadata?.confidence === 'low';
+
+  const emptyRequiredKeys = submitted
+    ? new Set(
+        REVIEW_FIELDS.filter(
+          (f) => f.required && !getCompanyFieldValue(props.company, f.key).trim(),
+        ).map((f) => f.key),
+      )
+    : new Set<string>();
+
+  const handleConfirm = () => {
+    setSubmitted(true);
+    const hasEmpty = REVIEW_FIELDS.some(
+      (f) => f.required && !getCompanyFieldValue(props.company, f.key).trim(),
+    );
+    if (!hasEmpty) props.onConfirm();
+  };
+
   const registeredAddressGroup = (
     <View
       key="registeredAddress"
-      style={[
-        styles.reviewFieldGroup,
-        isRegisteredAddressLowConfidence && styles.lowConfidence,
-      ]}
+      style={styles.reviewFieldGroup}
     >
       <View style={styles.reviewFieldHeader}>
         <Text style={styles.label}>Registered address</Text>
-        <Text
-          style={[
-            styles.confidenceBadge,
-            isRegisteredAddressLowConfidence && styles.lowConfidenceBadge,
-          ]}
-        >
-          {formatConfidence(registeredAddressMetadata)}
-        </Text>
+        <ConfidenceIndicator confidence={registeredAddressMetadata?.confidence} />
       </View>
 
       <View style={styles.groupedReviewFields}>
@@ -51,6 +58,7 @@ export function ReviewStep(props: {
             value={getCompanyFieldValue(props.company, field.key)}
             grouped
             showMetadata={false}
+            hasError={emptyRequiredKeys.has(field.key)}
             onChange={(value) =>
               props.onChangeCompany(
                 updateCompanyField(props.company, field.key, value),
@@ -106,6 +114,7 @@ export function ReviewStep(props: {
               config={field}
               metadata={metadata}
               value={getCompanyFieldValue(props.company, field.key)}
+              hasError={emptyRequiredKeys.has(field.key)}
               onChange={(value) =>
                 props.onChangeCompany(
                   updateCompanyField(props.company, field.key, value),
@@ -117,7 +126,7 @@ export function ReviewStep(props: {
       </View>
 
       <Pressable
-        onPress={props.onConfirm}
+        onPress={handleConfirm}
         style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
       >
         <Text style={styles.buttonText}>Looks good</Text>
