@@ -14,7 +14,6 @@ export function ReviewStep(props: {
 }) {
   return (
     <View>
-      <Text style={styles.h1}>Review your details</Text>
       <Text style={styles.subtitle}>
         We've pulled this in for you. Check it over before continuing.
       </Text>

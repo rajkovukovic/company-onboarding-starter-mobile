@@ -15,7 +15,6 @@ export function InputStep(props: {
 
   return (
     <View>
-      <Text style={styles.h1}>Company Onboarding</Text>
       <Text style={styles.subtitle}>
         Enter your details and we'll fill in the rest
       </Text>

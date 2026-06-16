@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   ScrollView,
+  Text,
   View,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
@@ -24,6 +26,12 @@ import { getInputValidationError } from './src/validation';
 
 type Step = 'input' | 'review' | 'confirm';
 
+const pageTitles: Record<Step, string> = {
+  input: 'Company Onboarding',
+  review: 'Review your details',
+  confirm: "You're all set",
+};
+
 export default function App() {
   return (
     <SafeAreaProvider>
@@ -34,6 +42,7 @@ export default function App() {
 
 function OnboardingFlow() {
   const insets = useSafeAreaInsets();
+  const headerHeight = insets.top + 56;
   const [step, setStep] = useState<Step>('input');
   const [email, setEmail] = useState('');
   const [website, setWebsite] = useState('');
@@ -138,6 +147,19 @@ function OnboardingFlow() {
     }
   };
 
+  const handleBack = () => {
+    if (step === 'confirm') {
+      setStep(result ? 'review' : 'input');
+      return;
+    }
+
+    if (step === 'review') {
+      setStep('input');
+    }
+  };
+
+  const canGoBack = step !== 'input';
+
   if (!hasRestoredState) {
     return (
       <View style={styles.safe}>
@@ -157,7 +179,7 @@ function OnboardingFlow() {
           contentContainerStyle={[
             styles.scroll,
             {
-              paddingTop: insets.top + 32,
+              paddingTop: headerHeight + 24,
               paddingBottom: insets.bottom + 40,
             },
           ]}
@@ -196,11 +218,43 @@ function OnboardingFlow() {
         </ScrollView>
       </KeyboardAvoidingView>
       <BlurView
-        pointerEvents="none"
         intensity={70}
         tint="light"
-        style={[styles.topBlur, { height: insets.top + 18 }]}
-      />
+        style={[
+          styles.topBlur,
+          { height: headerHeight, paddingTop: insets.top },
+        ]}
+      >
+        <PageHeader
+          title={pageTitles[step]}
+          onBack={canGoBack ? handleBack : undefined}
+        />
+      </BlurView>
+    </View>
+  );
+}
+
+function PageHeader(props: { title: string; onBack?: () => void }) {
+  return (
+    <View style={styles.pageHeader}>
+      {props.onBack ? (
+        <Pressable
+          onPress={props.onBack}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          hitSlop={8}
+          style={({ pressed }) => [
+            styles.headerBackButton,
+            pressed && styles.buttonPressed,
+          ]}
+        >
+          <Text style={styles.headerBackText}>{'‹'}</Text>
+        </Pressable>
+      ) : (
+        <View style={styles.headerBackButtonPlaceholder} />
+      )}
+      <Text style={styles.pageHeaderTitle}>{props.title}</Text>
+      <View style={styles.headerBackButtonPlaceholder} />
     </View>
   );
 }
