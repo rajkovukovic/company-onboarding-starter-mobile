@@ -20,8 +20,20 @@ type TestResponse = {
   body: any;
 };
 
+type DetailedMockFetchEntry = {
+  status?: number;
+  body: JsonValue | string;
+  contentType?: string;
+};
+
+type MockFetchEntry =
+  | JsonValue
+  | string
+  | DetailedMockFetchEntry;
+
 const originalFetch = globalThis.fetch;
 const originalCompaniesHouseApiKey = process.env.COMPANIES_HOUSE_API_KEY;
+const originalCompaniesHouseBaseUrl = process.env.COMPANIES_HOUSE_BASE_URL;
 
 function createApp() {
   const app = express();
@@ -84,33 +96,69 @@ async function postJson(baseUrl: string, payload: unknown): Promise<TestResponse
   });
 }
 
-function mockCompaniesHouse(responses: Record<string, JsonValue>) {
+function isDetailedMockFetchEntry(
+  entry: MockFetchEntry
+): entry is DetailedMockFetchEntry {
+  return typeof entry === 'object' && entry !== null && 'body' in entry;
+}
+
+function mockFetch(responses: Record<string, MockFetchEntry>) {
   const calls: string[] = [];
 
   globalThis.fetch = async (input) => {
     const url = new URL(input.toString());
-    const key = `${url.pathname}${url.search}`;
+    const key =
+      url.hostname.endsWith('company-information.service.gov.uk')
+        ? `${url.pathname}${url.search}`
+        : url.toString();
     calls.push(key);
-    const body = responses[key];
+    const entry = responses[key];
 
-    if (!body) {
+    if (!entry) {
       return new Response(JSON.stringify({ error: 'not found' }), {
         status: 404,
         headers: { 'Content-Type': 'application/json' },
       });
     }
 
-    return new Response(JSON.stringify(body), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    const isDetailedEntry = isDetailedMockFetchEntry(entry);
+    const status = isDetailedEntry ? entry.status ?? 200 : 200;
+    const body = isDetailedEntry ? entry.body : entry;
+    const contentType =
+      isDetailedEntry && entry.contentType
+        ? entry.contentType
+        : typeof body === 'string'
+          ? 'text/html'
+          : 'application/json';
+
+    return new Response(
+      typeof body === 'string' ? body : JSON.stringify(body),
+      {
+        status,
+        headers: { 'Content-Type': contentType },
+      }
+    );
   };
 
   return calls;
 }
 
+function mockCompaniesHouse(responses: Record<string, MockFetchEntry>) {
+  return mockFetch(responses);
+}
+
+function mockWebsitePage(website: string, html: string) {
+  return mockFetch({
+    [website]: {
+      body: html,
+      contentType: 'text/html',
+    },
+  });
+}
+
 beforeEach(() => {
   delete process.env.COMPANIES_HOUSE_API_KEY;
+  delete process.env.COMPANIES_HOUSE_BASE_URL;
   globalThis.fetch = originalFetch;
 });
 
@@ -119,6 +167,12 @@ afterEach(() => {
     delete process.env.COMPANIES_HOUSE_API_KEY;
   } else {
     process.env.COMPANIES_HOUSE_API_KEY = originalCompaniesHouseApiKey;
+  }
+
+  if (originalCompaniesHouseBaseUrl === undefined) {
+    delete process.env.COMPANIES_HOUSE_BASE_URL;
+  } else {
+    process.env.COMPANIES_HOUSE_BASE_URL = originalCompaniesHouseBaseUrl;
   }
 
   globalThis.fetch = originalFetch;
@@ -163,7 +217,12 @@ test('returns 400 when website is invalid', async () => {
   });
 });
 
-test('normalizes website and returns a warning when Companies House is unavailable', async () => {
+test('normalizes website and uses website data when Companies House is unavailable', async () => {
+  mockWebsitePage(
+    'https://example.com/about',
+    '<html><head><title>Example Ltd | Home</title></head></html>'
+  );
+
   await withApp(async (baseUrl) => {
     const response = await postJson(baseUrl, {
       email: 'founder@example.com',
@@ -176,11 +235,17 @@ test('normalizes website and returns a warning when Companies House is unavailab
       website: 'https://example.com/about',
       domain: 'example.com',
     });
-    assert.deepEqual(response.body.company, {});
-    assert.deepEqual(response.body.enrichment.sources, []);
-    assert.deepEqual(response.body.enrichment.fields, {});
+    assert.deepEqual(response.body.company, {
+      name: 'Example Ltd',
+    });
+    assert.deepEqual(response.body.enrichment.sources, ['Company Website']);
+    assert.deepEqual(response.body.enrichment.fields.name, {
+      sources: ['Company Website'],
+      confidence: 'medium',
+      reason: 'found in company website metadata or page title',
+    });
     assert.match(
-      response.body.enrichment.warnings[0],
+      response.body.enrichment.warnings.at(-1),
       /COMPANIES_HOUSE_API_KEY is not configured/
     );
   });
@@ -189,6 +254,7 @@ test('normalizes website and returns a warning when Companies House is unavailab
 test('maps a high-confidence Companies House match into structured company data', async () => {
   process.env.COMPANIES_HOUSE_API_KEY = 'test-key';
   const calls = mockCompaniesHouse({
+    'https://acme.co.uk/': '<html><head><title>Acme | Home</title></head></html>',
     '/search/companies?q=acme&items_per_page=5': {
       items: [
         {
@@ -225,6 +291,7 @@ test('maps a high-confidence Companies House match into structured company data'
 
     assert.equal(response.statusCode, 200);
     assert.deepEqual(calls, [
+      'https://acme.co.uk/',
       '/search/companies?q=acme&items_per_page=5',
       '/company/12345678',
     ]);
@@ -248,7 +315,10 @@ test('maps a high-confidence Companies House match into structured company data'
         country: 'United Kingdom',
       },
     });
-    assert.deepEqual(response.body.enrichment.sources, ['Companies House']);
+    assert.deepEqual(response.body.enrichment.sources, [
+      'Company Website',
+      'Companies House',
+    ]);
 
     for (const field of [
       'name',
@@ -271,6 +341,11 @@ test('maps a high-confidence Companies House match into structured company data'
 test('returns partial data with a warning when Companies House has no usable match', async () => {
   process.env.COMPANIES_HOUSE_API_KEY = 'test-key';
   mockCompaniesHouse({
+    'https://unknown-company.co.uk/': {
+      status: 404,
+      body: 'not found',
+      contentType: 'text/plain',
+    },
     '/search/companies?q=unknown%20company&items_per_page=5': {
       items: [],
     },
@@ -288,12 +363,88 @@ test('returns partial data with a warning when Companies House has no usable mat
       website: 'https://unknown-company.co.uk',
       domain: 'unknown-company.co.uk',
     });
-    assert.deepEqual(response.body.company, {});
-    assert.deepEqual(response.body.enrichment.sources, []);
-    assert.deepEqual(response.body.enrichment.fields, {});
+    assert.deepEqual(response.body.company, {
+      name: 'Unknown Company',
+    });
+    assert.deepEqual(response.body.enrichment.sources, ['Company Website']);
+    assert.deepEqual(response.body.enrichment.fields.name, {
+      sources: ['Company Website'],
+      confidence: 'low',
+      reason: 'derived from the normalized company website domain',
+    });
     assert.match(
-      response.body.enrichment.warnings[0],
+      response.body.enrichment.warnings.at(-1),
       /No usable Companies House match found/
     );
+  });
+});
+
+test('keeps website enrichment when Companies House rejects the API key', async () => {
+  process.env.COMPANIES_HOUSE_API_KEY = 'invalid-key';
+  mockFetch({
+    'https://acme.co.uk/':
+      '<html><head><meta property="og:site_name" content="Acme"></head></html>',
+    '/search/companies?q=acme&items_per_page=5': {
+      status: 401,
+      body: { error: 'unauthorised' },
+    },
+  });
+
+  await withApp(async (baseUrl) => {
+    const response = await postJson(baseUrl, {
+      email: 'founder@example.com',
+      website: 'acme.co.uk',
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.body.company, {
+      name: 'Acme',
+    });
+    assert.deepEqual(response.body.enrichment.sources, ['Company Website']);
+    assert.deepEqual(response.body.enrichment.fields.name, {
+      sources: ['Company Website'],
+      confidence: 'medium',
+      reason: 'found in company website metadata or page title',
+    });
+    assert.match(
+      response.body.enrichment.warnings.at(-1),
+      /Companies House returned 401/
+    );
+  });
+});
+
+test('uses a configured Companies House base URL', async () => {
+  process.env.COMPANIES_HOUSE_API_KEY = 'test-key';
+  process.env.COMPANIES_HOUSE_BASE_URL =
+    'https://api-sandbox.company-information.service.gov.uk';
+  const calls = mockFetch({
+    'https://acme.co.uk/': '<html><head><title>Acme</title></head></html>',
+    '/search/companies?q=acme&items_per_page=5': {
+      items: [
+        {
+          title: 'ACME LIMITED',
+          company_number: '12345678',
+        },
+      ],
+    },
+    '/company/12345678': {
+      company_name: 'ACME LIMITED',
+      company_number: '12345678',
+    },
+  });
+
+  await withApp(async (baseUrl) => {
+    const response = await postJson(baseUrl, {
+      email: 'founder@example.com',
+      website: 'acme.co.uk',
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(calls, [
+      'https://acme.co.uk/',
+      '/search/companies?q=acme&items_per_page=5',
+      '/company/12345678',
+    ]);
+    assert.equal(response.body.company.registrationNumber, '12345678');
   });
 });

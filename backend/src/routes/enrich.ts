@@ -6,6 +6,7 @@ import type {
   Confidence,
   EnrichRequest,
   EnrichResponse,
+  EnrichmentSource,
 } from '../../../shared/src/enrichment';
 
 const router = Router();
@@ -41,7 +42,7 @@ type CompaniesHouseAddress = {
   country?: string;
 };
 
-const COMPANIES_HOUSE_BASE_URL =
+const DEFAULT_COMPANIES_HOUSE_BASE_URL =
   'https://api.company-information.service.gov.uk';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -68,6 +69,13 @@ const COMMON_SECOND_LEVEL_DOMAINS = new Set([
   'org',
   'plc',
   'sch',
+]);
+const WEBSITE_FETCH_TIMEOUT_MS = 3500;
+const GENERIC_TITLE_PARTS = new Set([
+  'home',
+  'homepage',
+  'welcome',
+  'official website',
 ]);
 
 /**
@@ -119,6 +127,18 @@ function companySearchTermFromDomain(domain: string): string {
   return label.replace(/[-_]+/g, ' ').trim();
 }
 
+function titleCaseCompanyName(value: string): string {
+  return value
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
+}
+
+function companyNameFromDomain(domain: string): string {
+  return titleCaseCompanyName(companySearchTermFromDomain(domain));
+}
+
 /**
  * Tokenizes a company name for matching, ignoring legal suffixes that often
  * differ between domains and registry names.
@@ -130,6 +150,89 @@ function normalizeCompanyName(value: string): string[] {
     .replace(/[^a-z0-9\s]/g, ' ')
     .split(/\s+/)
     .filter((token) => token && !COMMON_LEGAL_SUFFIXES.has(token));
+}
+
+function decodeHtmlEntities(value: string): string {
+  return value
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&apos;/gi, "'")
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>');
+}
+
+function readHtmlAttribute(attributes: string, name: string): string | undefined {
+  const match = attributes.match(
+    new RegExp(`${name}\\s*=\\s*("([^"]*)"|'([^']*)'|([^\\s"'>]+))`, 'i')
+  );
+
+  return match?.[2] ?? match?.[3] ?? match?.[4];
+}
+
+function extractMetaContent(html: string, attribute: 'name' | 'property', value: string) {
+  const metaPattern = /<meta\s+([^>]*?)>/gi;
+  let match: RegExpExecArray | null;
+
+  while ((match = metaPattern.exec(html))) {
+    const attributes = match[1];
+    if (readHtmlAttribute(attributes, attribute)?.toLowerCase() === value) {
+      const content = readHtmlAttribute(attributes, 'content');
+      if (content) return decodeHtmlEntities(content).trim();
+    }
+  }
+
+  return undefined;
+}
+
+function extractTitle(html: string): string | undefined {
+  const title = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1];
+  if (!title) return undefined;
+
+  const parts = decodeHtmlEntities(title)
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .split(/\s+(?:\||-|:)\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  return (
+    parts.find((part) => !GENERIC_TITLE_PARTS.has(part.toLowerCase())) ??
+    parts[0]
+  );
+}
+
+async function fetchCompanyWebsiteMetadata(website: string) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), WEBSITE_FETCH_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(website, {
+      headers: {
+        Accept: 'text/html,application/xhtml+xml',
+        'User-Agent': 'SeapointCompanyEnrichment/1.0',
+      },
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(`company website returned ${response.status}`);
+    }
+
+    const html = await response.text();
+    const name =
+      extractMetaContent(html, 'property', 'og:site_name') ??
+      extractMetaContent(html, 'name', 'application-name') ??
+      extractTitle(html);
+    const description =
+      extractMetaContent(html, 'name', 'description') ??
+      extractMetaContent(html, 'property', 'og:description');
+
+    return { name, description };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 /**
@@ -183,12 +286,16 @@ function scoreCompaniesHouseMatch(
  * username and the password is empty per Companies House API conventions.
  */
 async function getCompaniesHouse<T>(path: string): Promise<T> {
-  const apiKey = process.env.COMPANIES_HOUSE_API_KEY;
+  const apiKey = process.env.COMPANIES_HOUSE_API_KEY?.trim();
   if (!apiKey) {
     throw new Error('COMPANIES_HOUSE_API_KEY is not configured');
   }
 
-  const response = await fetch(`${COMPANIES_HOUSE_BASE_URL}${path}`, {
+  const baseUrl =
+    process.env.COMPANIES_HOUSE_BASE_URL?.trim() ??
+    DEFAULT_COMPANIES_HOUSE_BASE_URL;
+
+  const response = await fetch(`${baseUrl}${path}`, {
     headers: {
       Authorization: `Basic ${Buffer.from(`${apiKey}:`).toString('base64')}`,
       Accept: 'application/json',
@@ -229,17 +336,70 @@ function mapCompaniesHouseAddress(
  * Records the field-level source, confidence, and explanation required by the
  * assessment review criteria.
  */
+function addSource(response: EnrichResponse, source: EnrichmentSource) {
+  if (!response.enrichment.sources.includes(source)) {
+    response.enrichment.sources.push(source);
+  }
+}
+
 function setField(
   response: EnrichResponse,
   field: CompanyField,
+  sources: EnrichmentSource[],
   confidence: Confidence,
   reason: string
 ) {
+  for (const source of sources) {
+    addSource(response, source);
+  }
+
   response.enrichment.fields[field] = {
-    sources: ['Companies House'],
+    sources,
     confidence,
     reason,
   };
+}
+
+async function enrichFromCompanyWebsite(
+  response: EnrichResponse,
+  normalizedWebsite: { website: string; domain: string }
+) {
+  response.company.name = companyNameFromDomain(normalizedWebsite.domain);
+  setField(
+    response,
+    'name',
+    ['Company Website'],
+    'low',
+    'derived from the normalized company website domain'
+  );
+
+  try {
+    const metadata = await fetchCompanyWebsiteMetadata(normalizedWebsite.website);
+    if (metadata.name) {
+      response.company.name = metadata.name;
+      setField(
+        response,
+        'name',
+        ['Company Website'],
+        'medium',
+        'found in company website metadata or page title'
+      );
+    }
+
+    if (metadata.description) {
+      response.company.industry = metadata.description;
+      setField(
+        response,
+        'industry',
+        ['Company Website'],
+        'low',
+        'inferred from the company website meta description'
+      );
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    response.enrichment.warnings?.push(`Company website unavailable: ${message}`);
+  }
 }
 
 router.post('/', async (req: Request<{}, {}, EnrichRequest>, res: Response) => {
@@ -276,6 +436,8 @@ router.post('/', async (req: Request<{}, {}, EnrichRequest>, res: Response) => {
 
   const searchTerm = companySearchTermFromDomain(normalizedWebsite.domain);
 
+  await enrichFromCompanyWebsite(response, normalizedWebsite);
+
   try {
     const searchResults = await getCompaniesHouse<CompaniesHouseSearchResponse>(
       `/search/companies?q=${encodeURIComponent(searchTerm)}&items_per_page=5`
@@ -298,8 +460,6 @@ router.post('/', async (req: Request<{}, {}, EnrichRequest>, res: Response) => {
     const profile = await getCompaniesHouse<CompaniesHouseCompanyProfile>(
       `/company/${encodeURIComponent(bestMatch.item.company_number)}`
     );
-    response.enrichment.sources.push('Companies House');
-
     const company: CompanyData = {
       name: profile.company_name ?? bestMatch.item.title,
       registrationNumber:
@@ -313,12 +473,16 @@ router.post('/', async (req: Request<{}, {}, EnrichRequest>, res: Response) => {
         mapCompaniesHouseAddress(bestMatch.item.address),
     };
 
-    response.company = company;
+    response.company = {
+      ...response.company,
+      ...company,
+    };
 
     if (company.name) {
       setField(
         response,
         'name',
+        ['Companies House'],
         bestMatch.match.confidence,
         bestMatch.match.reason
       );
@@ -329,17 +493,25 @@ router.post('/', async (req: Request<{}, {}, EnrichRequest>, res: Response) => {
       setField(
         response,
         'registrationNumber',
+        ['Companies House'],
         bestMatch.match.confidence,
         registryReason
       );
     }
     if (company.status) {
-      setField(response, 'status', bestMatch.match.confidence, registryReason);
+      setField(
+        response,
+        'status',
+        ['Companies House'],
+        bestMatch.match.confidence,
+        registryReason
+      );
     }
     if (company.incorporationDate) {
       setField(
         response,
         'incorporationDate',
+        ['Companies House'],
         bestMatch.match.confidence,
         registryReason
       );
@@ -348,6 +520,7 @@ router.post('/', async (req: Request<{}, {}, EnrichRequest>, res: Response) => {
       setField(
         response,
         'companyType',
+        ['Companies House'],
         bestMatch.match.confidence,
         registryReason
       );
@@ -356,6 +529,7 @@ router.post('/', async (req: Request<{}, {}, EnrichRequest>, res: Response) => {
       setField(
         response,
         'registeredAddress',
+        ['Companies House'],
         bestMatch.match.confidence,
         registryReason
       );
