@@ -22,7 +22,11 @@ export function ConfirmStep(props: {
     return (
       <View>
         <View style={styles.successPanel}>
-          <Text style={styles.successIcon}>OK</Text>
+          <View style={styles.successIconHalo}>
+            <View style={styles.successIcon}>
+              <Text style={styles.successCheck}>{'\u2713'}</Text>
+            </View>
+          </View>
           <Text style={styles.successTitle}>Company details saved</Text>
           <Text style={styles.successText}>
             {resolveValue(props.company.name).text} is ready to continue onboarding.
@@ -33,7 +37,7 @@ export function ConfirmStep(props: {
           onPress={props.onStartOver}
           style={({ pressed }) => [
             styles.secondaryButton,
-            pressed && styles.buttonPressed,
+            pressed && styles.pressedFade,
           ]}
         >
           <Text style={styles.secondaryButtonText}>Start over</Text>

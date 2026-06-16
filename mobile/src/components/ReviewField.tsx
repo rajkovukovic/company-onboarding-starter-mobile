@@ -1,12 +1,5 @@
 import { type Ref, useState } from 'react';
-import {
-  Modal,
-  Platform,
-  Pressable,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Modal, Platform, Pressable, Text, View } from 'react-native';
 import DateTimePicker, {
   type DateTimePickerEvent,
 } from '@react-native-community/datetimepicker';
@@ -15,6 +8,7 @@ import { formatSources } from '../company';
 import { styles } from '../styles';
 import type { ReviewFieldConfig } from '../reviewFields';
 import type { FieldEnrichment } from '../types';
+import { AppTextInput } from './AppTextInput';
 import { ConfidenceIndicator } from './ConfidenceIndicator';
 
 function parseDateString(value: string): Date {
@@ -173,7 +167,7 @@ export function ReviewField(props: {
           hasError={props.hasError}
         />
       ) : (
-        <TextInput
+        <AppTextInput
           value={props.value}
           onChangeText={props.onChange}
           placeholder={props.config.placeholder}
@@ -183,7 +177,7 @@ export function ReviewField(props: {
           returnKeyType={props.config.multiline ? 'default' : 'next'}
           multiline={props.config.multiline}
           scrollEnabled={false}
-          style={[styles.input, props.config.multiline && styles.inputMultiline]}
+          style={props.config.multiline ? styles.inputMultiline : undefined}
         />
       )}
 

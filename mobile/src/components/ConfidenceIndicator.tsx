@@ -27,7 +27,7 @@ export function ConfidenceIndicator({
   const isMedium = effectiveConfidence === 'medium';
 
   const wrapperStyle = isHigh
-    ? styles.confidenceContainer
+    ? styles.confidencePillHigh
     : isMedium
       ? styles.confidencePillMedium
       : styles.confidencePillLow;

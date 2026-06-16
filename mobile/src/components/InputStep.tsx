@@ -1,6 +1,7 @@
-import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 
 import { styles } from '../styles';
+import { AppTextInput } from './AppTextInput';
 
 export function InputStep(props: {
   email: string;
@@ -21,7 +22,7 @@ export function InputStep(props: {
 
       <View style={styles.field}>
         <Text style={styles.label}>Work Email</Text>
-        <TextInput
+        <AppTextInput
           value={props.email}
           onChangeText={props.onChangeEmail}
           placeholder="you@company.com"
@@ -30,13 +31,12 @@ export function InputStep(props: {
           keyboardType="email-address"
           textContentType="emailAddress"
           returnKeyType="next"
-          style={styles.input}
         />
       </View>
 
       <View style={styles.field}>
         <Text style={styles.label}>Company Website</Text>
-        <TextInput
+        <AppTextInput
           value={props.website}
           onChangeText={props.onChangeWebsite}
           placeholder="https://company.com"
@@ -45,7 +45,6 @@ export function InputStep(props: {
           keyboardType="url"
           textContentType="URL"
           returnKeyType="done"
-          style={styles.input}
           onSubmitEditing={props.onSubmit}
         />
       </View>

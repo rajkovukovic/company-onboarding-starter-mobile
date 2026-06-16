@@ -299,7 +299,7 @@ function PageHeader(props: { title: string; onBack?: () => void }) {
           hitSlop={8}
           style={({ pressed }) => [
             styles.headerBackButton,
-            pressed && styles.buttonPressed,
+            pressed && styles.pressedFade,
           ]}
         >
           <Text style={styles.headerBackText}>{'‹'}</Text>
