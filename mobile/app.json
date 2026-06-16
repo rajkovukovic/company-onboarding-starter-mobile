@@ -21,7 +21,8 @@
       "predictiveBackGestureEnabled": false
     },
     "plugins": [
-      "expo-sqlite"
+      "expo-sqlite",
+      "@react-native-community/datetimepicker"
     ]
   }
 }

@@ -17,6 +17,7 @@ export type ReviewFieldConfig = {
   keyboardType?: 'default' | 'numbers-and-punctuation';
   multiline?: boolean;
   required?: boolean;
+  datePicker?: boolean;
 };
 
 export const REVIEW_FIELDS: ReviewFieldConfig[] = [
@@ -82,8 +83,8 @@ export const REVIEW_FIELDS: ReviewFieldConfig[] = [
     key: 'incorporationDate',
     metadataKey: 'incorporationDate',
     label: 'Incorporation date',
-    placeholder: 'YYYY-MM-DD',
-    keyboardType: 'numbers-and-punctuation',
+    placeholder: 'Select a date',
+    datePicker: true,
     required: true,
   },
   {

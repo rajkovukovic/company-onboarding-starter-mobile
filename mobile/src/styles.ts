@@ -283,4 +283,57 @@ export const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  datePickerTrigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  datePickerValue: {
+    fontSize: 16,
+    color: '#111827',
+    flex: 1,
+  },
+  datePickerPlaceholder: {
+    fontSize: 16,
+    color: '#9ca3af',
+    flex: 1,
+  },
+  datePickerChevron: {
+    fontSize: 20,
+    color: '#9ca3af',
+    lineHeight: 24,
+    transform: [{ rotate: '90deg' }],
+  },
+  datePickerSpinner: {
+    width: '100%',
+  },
+  dateModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'flex-end',
+  },
+  dateModalSheet: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    paddingBottom: 32,
+  },
+  dateModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f1f3',
+  },
+  dateModalCancel: {
+    fontSize: 16,
+    color: '#6b7280',
+  },
+  dateModalDone: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#2563eb',
+  },
 });
