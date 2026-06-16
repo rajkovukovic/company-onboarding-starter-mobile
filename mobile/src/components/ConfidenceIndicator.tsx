@@ -19,7 +19,9 @@ export function ConfidenceIndicator({
 }: {
   confidence?: Confidence;
 }) {
-  const effectiveConfidence: NonNullable<Confidence> = confidence ?? 'low';
+  if (!confidence) return null;
+
+  const effectiveConfidence: NonNullable<Confidence> = confidence;
   const { activeDots, label } = LEVEL_CONFIG[effectiveConfidence];
   const isHigh = effectiveConfidence === 'high';
   const isMedium = effectiveConfidence === 'medium';
