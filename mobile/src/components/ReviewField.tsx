@@ -1,4 +1,4 @@
-import { Text, TextInput, View } from 'react-native';
+import { Text, TextInput, View, type ViewProps } from 'react-native';
 
 import { formatSources } from '../company';
 import { styles } from '../styles';
@@ -14,11 +14,13 @@ export function ReviewField(props: {
   grouped?: boolean;
   showMetadata?: boolean;
   hasError?: boolean;
+  viewRef?: ViewProps['ref'];
 }) {
   const showMetadata = props.showMetadata ?? true;
 
   return (
     <View
+      ref={props.viewRef}
       style={[
         props.grouped ? styles.groupedReviewField : styles.reviewField,
         !props.grouped && props.hasError && styles.reviewFieldError,

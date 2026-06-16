@@ -227,6 +227,12 @@ export const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 21,
   },
+  confirmValueEmpty: {
+    color: '#9ca3af',
+    fontSize: 14,
+    lineHeight: 21,
+    fontStyle: 'italic',
+  },
   successPanel: {
     backgroundColor: '#fff',
     borderWidth: 1,

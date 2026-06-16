@@ -254,6 +254,8 @@ function OnboardingFlow() {
               warnings={result.enrichment.warnings}
               onChangeCompany={setEditedCompany}
               onConfirm={handleReviewConfirm}
+              scrollViewRef={scrollViewRef}
+              scrollTopOffset={headerHeight}
             />
           )}
 

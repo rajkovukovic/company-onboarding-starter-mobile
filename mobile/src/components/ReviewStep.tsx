@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { useRef, useState } from 'react';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 
 import {
   formatSources,
@@ -18,8 +18,12 @@ export function ReviewStep(props: {
   warnings?: string[];
   onChangeCompany: (company: CompanyData) => void;
   onConfirm: () => void;
+  scrollViewRef: React.RefObject<ScrollView | null>;
+  scrollTopOffset: number;
 }) {
   const [submitted, setSubmitted] = useState(false);
+  const fieldRefs = useRef<Partial<Record<string, View | null>>>({});
+  const addressGroupRef = useRef<View | null>(null);
   const warnings = props.warnings?.filter(Boolean) ?? [];
   const registeredAddressMetadata = props.enrichment.registeredAddress;
 
@@ -31,17 +35,41 @@ export function ReviewStep(props: {
       )
     : new Set<string>();
 
+  const scrollToFirstError = (firstErrorKey: string, isAddressField: boolean) => {
+    const target = isAddressField
+      ? addressGroupRef.current
+      : fieldRefs.current[firstErrorKey];
+    const scrollView = props.scrollViewRef.current;
+    if (!target || !scrollView) return;
+    target.measureLayout(
+      scrollView as unknown as View,
+      (_x, y) => {
+        props.scrollViewRef.current?.scrollTo({
+          y: Math.max(0, y - props.scrollTopOffset - 16),
+          animated: true,
+        });
+      },
+      () => {},
+    );
+  };
+
   const handleConfirm = () => {
     setSubmitted(true);
-    const hasEmpty = REVIEW_FIELDS.some(
+    const firstError = REVIEW_FIELDS.find(
       (f) => f.required && !getCompanyFieldValue(props.company, f.key).trim(),
     );
-    if (!hasEmpty) props.onConfirm();
+    if (!firstError) {
+      props.onConfirm();
+      return;
+    }
+    const isAddressField = firstError.metadataKey === 'registeredAddress';
+    requestAnimationFrame(() => scrollToFirstError(firstError.key, isAddressField));
   };
 
   const registeredAddressGroup = (
     <View
       key="registeredAddress"
+      ref={addressGroupRef}
       style={styles.reviewFieldGroup}
     >
       <View style={styles.reviewFieldHeader}>
@@ -115,6 +143,9 @@ export function ReviewStep(props: {
               metadata={metadata}
               value={getCompanyFieldValue(props.company, field.key)}
               hasError={emptyRequiredKeys.has(field.key)}
+              viewRef={(ref: View | null) => {
+                fieldRefs.current[field.key] = ref;
+              }}
               onChange={(value) =>
                 props.onChangeCompany(
                   updateCompanyField(props.company, field.key, value),
