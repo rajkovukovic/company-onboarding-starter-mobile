@@ -2,6 +2,7 @@ import type {
   CompanyData,
   Confidence,
   EnrichResponse,
+  EnrichmentSource,
 } from '../../../shared/src/enrichment';
 
 import { setField } from './response';
@@ -35,6 +36,12 @@ type CompaniesHouseAddress = {
   region?: string;
   postal_code?: string;
   country?: string;
+};
+
+export type CompaniesHouseSearchTerm = {
+  value: string;
+  reason: string;
+  sources: Array<EnrichmentSource | 'Domain' | 'OpenAI'>;
 };
 
 const DEFAULT_COMPANIES_HOUSE_BASE_URL =
@@ -81,18 +88,23 @@ function normalizeCompanyName(value: string): string[] {
  */
 function scoreCompaniesHouseMatch(
   item: CompaniesHouseSearchItem,
-  searchTerm: string
+  searchTerm: CompaniesHouseSearchTerm
 ): { score: number; confidence: Confidence; reason: string } {
   const titleTokens = normalizeCompanyName(item.title ?? '');
-  const searchTokens = normalizeCompanyName(searchTerm);
+  const searchTokens = normalizeCompanyName(searchTerm.value);
   const title = titleTokens.join(' ');
   const search = searchTokens.join(' ');
+  const evidenceReason =
+    searchTerm.sources.includes('Company Website') ||
+    searchTerm.sources.includes('OpenAI')
+      ? searchTerm.reason
+      : 'normalized website domain';
 
   if (title && search && title === search) {
     return {
       score: 100,
       confidence: 'high',
-      reason: 'exact Companies House name match for the normalized website domain',
+      reason: `exact Companies House name match for ${evidenceReason}`,
     };
   }
 
@@ -100,7 +112,7 @@ function scoreCompaniesHouseMatch(
     return {
       score: 80,
       confidence: 'high',
-      reason: 'strong Companies House name match for the normalized website domain',
+      reason: `strong Companies House name match for ${evidenceReason}`,
     };
   }
 
@@ -110,14 +122,14 @@ function scoreCompaniesHouseMatch(
       score: 40 + overlap,
       confidence: 'medium',
       reason:
-        'partial Companies House name match for the normalized website domain',
+        `partial Companies House name match for ${evidenceReason}`,
     };
   }
 
   return {
     score: 0,
     confidence: 'low',
-    reason: 'weak Companies House match for the normalized website domain',
+    reason: `weak Companies House match for ${evidenceReason}`,
   };
 }
 
@@ -189,31 +201,60 @@ function getCompaniesHouseUnavailableWarning(error: unknown) {
 
 export async function enrichFromCompaniesHouse(
   response: EnrichResponse,
-  searchTerm: string
+  searchTerms: CompaniesHouseSearchTerm[]
 ) {
   try {
-    const searchResults = await getCompaniesHouse<CompaniesHouseSearchResponse>(
-      `/search/companies?q=${encodeURIComponent(searchTerm)}&items_per_page=5`
-    );
-    const rankedMatches = (searchResults.items ?? [])
-      .map((item) => ({
-        item,
-        match: scoreCompaniesHouseMatch(item, searchTerm),
-      }))
-      .sort((a, b) => b.match.score - a.match.score);
-    const bestMatch = rankedMatches[0];
-    const nextMatch = rankedMatches[1];
+    let selected:
+      | {
+          searchTerm: CompaniesHouseSearchTerm;
+          bestMatch: {
+            item: CompaniesHouseSearchItem;
+            match: ReturnType<typeof scoreCompaniesHouseMatch>;
+          };
+          companyNumber: string;
+          nextMatch?: {
+            item: CompaniesHouseSearchItem;
+            match: ReturnType<typeof scoreCompaniesHouseMatch>;
+          };
+        }
+      | undefined;
 
-    if (!bestMatch || bestMatch.match.score === 0 || !bestMatch.item.company_number) {
+    for (const searchTerm of searchTerms) {
+      const searchResults = await getCompaniesHouse<CompaniesHouseSearchResponse>(
+        `/search/companies?q=${encodeURIComponent(searchTerm.value)}&items_per_page=5`
+      );
+      const rankedMatches = (searchResults.items ?? [])
+        .map((item) => ({
+          item,
+          match: scoreCompaniesHouseMatch(item, searchTerm),
+        }))
+        .sort((a, b) => b.match.score - a.match.score);
+      const bestMatch = rankedMatches[0];
+
+      if (bestMatch && bestMatch.match.score > 0 && bestMatch.item.company_number) {
+        selected = {
+          searchTerm,
+          bestMatch,
+          companyNumber: bestMatch.item.company_number,
+          nextMatch: rankedMatches[1],
+        };
+        break;
+      }
+    }
+
+    if (!selected) {
+      const searchedTerms = searchTerms.map((term) => `"${term.value}"`).join(', ');
       response.enrichment.warnings?.push(
-        `No usable Companies House match found for "${searchTerm}"`
+        `No usable Companies House match found for ${searchedTerms}`
       );
       return;
     }
 
+    const { searchTerm, bestMatch, companyNumber, nextMatch } = selected;
+
     if (nextMatch && nextMatch.match.score > 0) {
       response.enrichment.warnings?.push(
-        `Multiple Companies House matches found for "${searchTerm}"; using "${bestMatch.item.title ?? bestMatch.item.company_number}" as the best match.`
+        `Multiple Companies House matches found for "${searchTerm.value}"; using "${bestMatch.item.title ?? bestMatch.item.company_number}" as the best match.`
       );
     }
 
@@ -224,12 +265,11 @@ export async function enrichFromCompaniesHouse(
     }
 
     const profile = await getCompaniesHouse<CompaniesHouseCompanyProfile>(
-      `/company/${encodeURIComponent(bestMatch.item.company_number)}`
+      `/company/${encodeURIComponent(companyNumber)}`
     );
     const company: CompanyData = {
       name: profile.company_name ?? bestMatch.item.title,
-      registrationNumber:
-        profile.company_number ?? bestMatch.item.company_number,
+      registrationNumber: profile.company_number ?? companyNumber,
       status: profile.company_status ?? bestMatch.item.company_status,
       incorporationDate:
         profile.date_of_creation ?? bestMatch.item.date_of_creation,
@@ -245,10 +285,16 @@ export async function enrichFromCompaniesHouse(
     };
 
     if (company.name) {
+      const nameSources: EnrichmentSource[] =
+        searchTerm.sources.includes('Company Website') ||
+        searchTerm.sources.includes('OpenAI')
+          ? ['Company Website', 'Companies House']
+          : ['Companies House'];
+
       setField(
         response,
         'name',
-        ['Companies House'],
+        nameSources,
         bestMatch.match.confidence,
         bestMatch.match.reason
       );

@@ -34,6 +34,8 @@ type MockFetchEntry =
 const originalFetch = globalThis.fetch;
 const originalCompaniesHouseApiKey = process.env.COMPANIES_HOUSE_API_KEY;
 const originalCompaniesHouseBaseUrl = process.env.COMPANIES_HOUSE_BASE_URL;
+const originalOpenAIApiKey = process.env.OPENAI_API_KEY;
+const originalOpenAIModel = process.env.OPENAI_MODEL;
 
 function createApp() {
   const app = express();
@@ -159,6 +161,8 @@ function mockWebsitePage(website: string, html: string) {
 beforeEach(() => {
   delete process.env.COMPANIES_HOUSE_API_KEY;
   delete process.env.COMPANIES_HOUSE_BASE_URL;
+  delete process.env.OPENAI_API_KEY;
+  delete process.env.OPENAI_MODEL;
   globalThis.fetch = originalFetch;
 });
 
@@ -173,6 +177,18 @@ afterEach(() => {
     delete process.env.COMPANIES_HOUSE_BASE_URL;
   } else {
     process.env.COMPANIES_HOUSE_BASE_URL = originalCompaniesHouseBaseUrl;
+  }
+
+  if (originalOpenAIApiKey === undefined) {
+    delete process.env.OPENAI_API_KEY;
+  } else {
+    process.env.OPENAI_API_KEY = originalOpenAIApiKey;
+  }
+
+  if (originalOpenAIModel === undefined) {
+    delete process.env.OPENAI_MODEL;
+  } else {
+    process.env.OPENAI_MODEL = originalOpenAIModel;
   }
 
   globalThis.fetch = originalFetch;
@@ -335,6 +351,95 @@ test('maps a high-confidence Companies House match into structured company data'
       assert.equal(typeof response.body.enrichment.fields[field].reason, 'string');
       assert.ok(response.body.enrichment.fields[field].reason.length > 0);
     }
+  });
+});
+
+test('uses OpenAI website interpretation to choose the primary company and industry', async () => {
+  process.env.COMPANIES_HOUSE_API_KEY = 'test-key';
+  process.env.OPENAI_API_KEY = 'openai-test-key';
+  const websiteHtml = `
+    <html>
+      <body>
+        <nav>Legal Privacy policy Terms & conditions Cookie policy Complaints handling Cookie settings</nav>
+        <p>Seapoint Finance UK Limited is a distributor of Modulr FS Limited, a company registered in England and Wales with company number 09897919, which is authorised and regulated by the Financial Conduct Authority as an Electronic Money Institution.</p>
+        <p>Seapoint Finance UK Investments Ltd (FRN: 1039246) is an appointed representative of Wealthkernel Limited.</p>
+        <p>Yapily Connect Limited also provides account information service & payment initiation service.</p>
+        <footer>© 2026 Seapoint Finance UK Limited. All rights reserved.</footer>
+      </body>
+    </html>
+  `;
+  const calls = mockFetch({
+    'https://seapoint.co/': websiteHtml,
+    'https://api.openai.com/v1/responses': {
+      body: {
+        output_text: JSON.stringify({
+          companyName: 'Seapoint Finance UK Limited',
+          industry: 'Financial Technology / Payments and Investments',
+          confidence: 'high',
+          reason:
+            'The website states Seapoint Finance UK Limited is the distributor and repeats it in the copyright notice; other companies are providers or partners.',
+          userFacingWarning: null,
+          rejectedNames: [
+            'Modulr FS Limited',
+            'Wealthkernel Limited',
+            'Yapily Connect Limited',
+          ],
+        }),
+      },
+      contentType: 'application/json',
+    },
+    '/search/companies?q=Seapoint%20Finance%20UK%20Limited&items_per_page=5': {
+      items: [
+        {
+          title: 'SEAPOINT FINANCE UK LIMITED',
+          company_number: '16400001',
+          company_status: 'active',
+          company_type: 'ltd',
+        },
+      ],
+    },
+    '/company/16400001': {
+      company_name: 'SEAPOINT FINANCE UK LIMITED',
+      company_number: '16400001',
+      company_status: 'active',
+      type: 'ltd',
+    },
+  });
+
+  await withApp(async (baseUrl) => {
+    const response = await postJson(baseUrl, {
+      email: 'founder@seapoint.co',
+      website: 'seapoint.co',
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(calls, [
+      'https://seapoint.co/',
+      'https://api.openai.com/v1/responses',
+      '/search/companies?q=Seapoint%20Finance%20UK%20Limited&items_per_page=5',
+      '/company/16400001',
+    ]);
+    assert.equal(response.body.company.name, 'SEAPOINT FINANCE UK LIMITED');
+    assert.equal(response.body.company.registrationNumber, '16400001');
+    assert.equal(
+      response.body.company.industry,
+      'Financial Technology / Payments and Investments'
+    );
+    assert.deepEqual(response.body.enrichment.fields.name.sources, [
+      'Company Website',
+      'Companies House',
+    ]);
+    assert.equal(response.body.enrichment.fields.name.confidence, 'high');
+    assert.match(
+      response.body.enrichment.fields.name.reason,
+      /OpenAI interpretation of company website evidence/
+    );
+    assert.deepEqual(response.body.enrichment.fields.industry, {
+      sources: ['Company Website'],
+      confidence: 'high',
+      reason:
+        'interpreted from company website evidence: The website states Seapoint Finance UK Limited is the distributor and repeats it in the copyright notice; other companies are providers or partners.',
+    });
   });
 });
 

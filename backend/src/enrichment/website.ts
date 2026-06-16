@@ -4,6 +4,7 @@ import { companyNameFromDomain, type NormalizedWebsite } from './domain';
 import { setField } from './response';
 
 const WEBSITE_FETCH_TIMEOUT_MS = 3500;
+const MAX_LEGAL_NAME_LENGTH = 140;
 
 const GENERIC_TITLE_PARTS = new Set([
   'home',
@@ -11,6 +12,20 @@ const GENERIC_TITLE_PARTS = new Set([
   'welcome',
   'official website',
 ]);
+
+const LEGAL_NAME_PATTERN =
+  /(?:^|[\s(,.;:|/-])(?:copyright\s*)?(?:©\s*)?(?:\d{4}\s*)?([A-Z][A-Za-z0-9&.,'’ -]{1,140}?\s+(?:Limited|Ltd\.?|PLC|LLP))\b/gi;
+
+export type WebsiteEvidence = {
+  name?: string;
+  description?: string;
+  legalNames: string[];
+  legalSnippets: string[];
+  visibleText?: string;
+  interpretedCompanyName?: string;
+  interpretedIndustry?: string;
+  interpretationReason?: string;
+};
 
 function decodeHtmlEntities(value: string): string {
   return value
@@ -20,6 +35,10 @@ function decodeHtmlEntities(value: string): string {
     .replace(/&apos;/gi, "'")
     .replace(/&lt;/gi, '<')
     .replace(/&gt;/gi, '>');
+}
+
+function compactWhitespace(value: string) {
+  return value.replace(/\s+/g, ' ').trim();
 }
 
 function readHtmlAttribute(attributes: string, name: string): string | undefined {
@@ -45,6 +64,25 @@ function extractMetaContent(html: string, attribute: 'name' | 'property', value:
   return undefined;
 }
 
+function htmlToTextBlocks(html: string) {
+  const body =
+    html.match(/<body[^>]*>([\s\S]*?)<\/body>/i)?.[1] ??
+    html.replace(/<head[\s\S]*?<\/head>/gi, ' ');
+
+  return decodeHtmlEntities(
+    body
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<svg[\s\S]*?<\/svg>/gi, ' ')
+      .replace(/<(?:br|p|div|li|footer|header|section|article|aside|nav|h[1-6])\b[^>]*>/gi, '\n')
+      .replace(/<\/(?:p|div|li|footer|header|section|article|aside|nav|h[1-6])>/gi, '\n')
+      .replace(/<[^>]+>/g, ' ')
+  )
+    .split(/\n+/)
+    .map(compactWhitespace)
+    .filter(Boolean);
+}
+
 function extractTitle(html: string): string | undefined {
   const title = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1];
   if (!title) return undefined;
@@ -63,7 +101,50 @@ function extractTitle(html: string): string | undefined {
   );
 }
 
-async function fetchCompanyWebsiteMetadata(website: string) {
+function normalizeLegalName(value: string) {
+  return compactWhitespace(
+    value
+      .replace(/^[\s©]*(?:copyright\s*)?(?:\d{4}\s*)?/i, '')
+      .replace(/[.,;:|/-]+$/g, '')
+  );
+}
+
+function isLikelyNavigationCandidate(value: string) {
+  return /\b(?:privacy policy|terms|cookie|complaints|settings|legal)\b/i.test(value);
+}
+
+function extractLegalEvidence(textBlocks: string[]) {
+  const legalNames: string[] = [];
+  const legalSnippets: string[] = [];
+  let match: RegExpExecArray | null;
+
+  for (const text of textBlocks) {
+    LEGAL_NAME_PATTERN.lastIndex = 0;
+    while ((match = LEGAL_NAME_PATTERN.exec(text))) {
+      const candidate = normalizeLegalName(match[1]);
+      if (
+        candidate.length <= MAX_LEGAL_NAME_LENGTH &&
+        !isLikelyNavigationCandidate(candidate) &&
+        !legalNames.some((name) => name.toLowerCase() === candidate.toLowerCase())
+      ) {
+        legalNames.push(candidate);
+      }
+    }
+
+    if (
+      /(?:company number|registered office|authorised|regulated|firm reference|FRN|©|copyright|limited|ltd\.?|plc|llp)/i.test(
+        text
+      ) &&
+      !legalSnippets.includes(text)
+    ) {
+      legalSnippets.push(text);
+    }
+  }
+
+  return { legalNames, legalSnippets };
+}
+
+async function fetchCompanyWebsiteEvidence(website: string): Promise<WebsiteEvidence> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), WEBSITE_FETCH_TIMEOUT_MS);
 
@@ -92,8 +173,16 @@ async function fetchCompanyWebsiteMetadata(website: string) {
     const description =
       extractMetaContent(html, 'name', 'description') ??
       extractMetaContent(html, 'property', 'og:description');
+    const textBlocks = htmlToTextBlocks(html);
+    const { legalNames, legalSnippets } = extractLegalEvidence(textBlocks);
 
-    return { name, description };
+    return {
+      name,
+      description,
+      legalNames,
+      legalSnippets,
+      visibleText: textBlocks.join('\n').slice(0, 12000),
+    };
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
       throw new Error(`company website timed out after ${WEBSITE_FETCH_TIMEOUT_MS}ms`);
@@ -108,7 +197,7 @@ async function fetchCompanyWebsiteMetadata(website: string) {
 export async function enrichFromCompanyWebsite(
   response: EnrichResponse,
   normalizedWebsite: NormalizedWebsite
-) {
+): Promise<WebsiteEvidence> {
   response.company.name = companyNameFromDomain(normalizedWebsite.domain);
   setField(
     response,
@@ -119,9 +208,20 @@ export async function enrichFromCompanyWebsite(
   );
 
   try {
-    const metadata = await fetchCompanyWebsiteMetadata(normalizedWebsite.website);
-    if (metadata.name) {
-      response.company.name = metadata.name;
+    const evidence = await fetchCompanyWebsiteEvidence(normalizedWebsite.website);
+    const legalName = evidence.legalNames[0];
+
+    if (legalName) {
+      response.company.name = legalName;
+      setField(
+        response,
+        'name',
+        ['Company Website'],
+        'medium',
+        'found in company website legal text'
+      );
+    } else if (evidence.name) {
+      response.company.name = evidence.name;
       setField(
         response,
         'name',
@@ -131,8 +231,8 @@ export async function enrichFromCompanyWebsite(
       );
     }
 
-    if (metadata.description) {
-      response.company.industry = metadata.description;
+    if (evidence.description) {
+      response.company.industry = evidence.description;
       setField(
         response,
         'industry',
@@ -141,8 +241,12 @@ export async function enrichFromCompanyWebsite(
         'inferred from the company website meta description'
       );
     }
+
+    return evidence;
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     response.enrichment.warnings?.push(`Company website unavailable: ${message}`);
+
+    return { legalNames: [], legalSnippets: [] };
   }
 }
