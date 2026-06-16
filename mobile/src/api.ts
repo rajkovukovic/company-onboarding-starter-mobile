@@ -17,7 +17,7 @@ function resolveApiUrl(): string {
 }
 
 export const API_URL = resolveApiUrl();
-const ENRICH_TIMEOUT_MS = 10000;
+const ENRICH_TIMEOUT_MS = Number(process.env.EXPO_PUBLIC_ENRICH_TIMEOUT_MS) || 10000;
 
 async function readErrorMessage(response: Response): Promise<string> {
   try {
