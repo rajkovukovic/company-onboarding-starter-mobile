@@ -29,7 +29,7 @@ type Step = 'input' | 'review' | 'confirm';
 const pageTitles: Record<Step, string> = {
   input: 'Company Onboarding',
   review: 'Review your details',
-  confirm: "You're all set",
+  confirm: 'Confirm details',
 };
 
 export default function App() {
@@ -50,8 +50,11 @@ function OnboardingFlow() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<EnrichResponse | null>(null);
   const [editedCompany, setEditedCompany] = useState<CompanyData>({});
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [hasRestoredState, setHasRestoredState] = useState(false);
   const submittingRef = useRef(false);
+  const savingRef = useRef(false);
   const persistencePromiseRef = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => {
@@ -117,6 +120,7 @@ function OnboardingFlow() {
       });
       setResult(data);
       setEditedCompany(data.company);
+      setSaved(false);
       setStep('review');
     } catch (err) {
       setError(
@@ -130,24 +134,51 @@ function OnboardingFlow() {
     }
   };
 
+  const handleReviewConfirm = () => {
+    setSaved(false);
+    setStep('confirm');
+  };
+
   const handleConfirm = async () => {
+    if (savingRef.current || saved) return;
+
     // TODO (candidate): in a real app this would POST to a save endpoint.
     const confirmedResult = result
       ? { ...result, company: editedCompany }
       : result;
 
+    savingRef.current = true;
+    setSaving(true);
     try {
+      await new Promise((resolve) => setTimeout(resolve, 350));
       await persistencePromiseRef.current.catch(() => undefined);
       await clearPersistedOnboardingState();
-    } finally {
       if (confirmedResult) {
         setResult(confirmedResult);
       }
-      setStep('confirm');
+      setSaved(true);
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
     }
   };
 
+  const handleStartOver = async () => {
+    await clearPersistedOnboardingState();
+    setStep('input');
+    setEmail('');
+    setWebsite('');
+    setError(null);
+    setResult(null);
+    setEditedCompany({});
+    setSaved(false);
+    setSaving(false);
+    savingRef.current = false;
+  };
+
   const handleBack = () => {
+    if (saving || saved) return;
+
     if (step === 'confirm') {
       setStep(result ? 'review' : 'input');
       return;
@@ -158,7 +189,8 @@ function OnboardingFlow() {
     }
   };
 
-  const canGoBack = step !== 'input';
+  const canGoBack = step !== 'input' && !saved && !saving;
+  const pageTitle = step === 'confirm' && saved ? "You're all set" : pageTitles[step];
 
   if (!hasRestoredState) {
     return (
@@ -210,11 +242,20 @@ function OnboardingFlow() {
               company={editedCompany}
               enrichment={result.enrichment.fields}
               onChangeCompany={setEditedCompany}
-              onConfirm={handleConfirm}
+              onConfirm={handleReviewConfirm}
             />
           )}
 
-          {step === 'confirm' && <ConfirmStep />}
+          {step === 'confirm' && result && (
+            <ConfirmStep
+              company={editedCompany}
+              input={result.input}
+              saving={saving}
+              saved={saved}
+              onSubmit={handleConfirm}
+              onStartOver={handleStartOver}
+            />
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
       <BlurView
@@ -226,7 +267,7 @@ function OnboardingFlow() {
         ]}
       >
         <PageHeader
-          title={pageTitles[step]}
+          title={pageTitle}
           onBack={canGoBack ? handleBack : undefined}
         />
       </BlurView>
