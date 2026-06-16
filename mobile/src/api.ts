@@ -18,6 +18,19 @@ function resolveApiUrl(): string {
 
 export const API_URL = resolveApiUrl();
 
+async function readErrorMessage(response: Response): Promise<string> {
+  try {
+    const body = (await response.json()) as { error?: unknown };
+    if (typeof body.error === 'string' && body.error.trim()) {
+      return body.error;
+    }
+  } catch {
+    // Fall back to a stable message below when the server does not return JSON.
+  }
+
+  return 'We could not enrich those company details. Please try again.';
+}
+
 export async function enrich(input: {
   email: string;
   website: string;
@@ -29,7 +42,7 @@ export async function enrich(input: {
   });
 
   if (!response.ok) {
-    throw new Error(`Enrichment failed (${response.status})`);
+    throw new Error(await readErrorMessage(response));
   }
 
   return response.json();

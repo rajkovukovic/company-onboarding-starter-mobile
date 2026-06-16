@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -16,6 +18,42 @@ import type { EnrichResponse } from './src/types';
 
 type Step = 'input' | 'review' | 'confirm';
 
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function getWebsiteValidationError(rawWebsite: string): string | null {
+  const website = rawWebsite.trim();
+  if (!website) return 'Enter your company website.';
+
+  try {
+    const url = new URL(/^https?:\/\//i.test(website) ? website : `https://${website}`);
+    const hostname = url.hostname;
+    const hostnameParts = hostname.split('.');
+
+    if (
+      !['http:', 'https:'].includes(url.protocol) ||
+      hostnameParts.length < 2 ||
+      hostnameParts.some((part) => !part) ||
+      /\s/.test(hostname)
+    ) {
+      return 'Enter a valid company website, like company.com.';
+    }
+  } catch {
+    return 'Enter a valid company website, like company.com.';
+  }
+
+  return null;
+}
+
+function getInputValidationError(email: string, website: string): string | null {
+  const trimmedEmail = email.trim();
+  if (!trimmedEmail) return 'Enter your work email.';
+  if (!EMAIL_PATTERN.test(trimmedEmail)) {
+    return 'Enter a valid work email, like you@company.com.';
+  }
+
+  return getWebsiteValidationError(website);
+}
+
 export default function App() {
   const [step, setStep] = useState<Step>('input');
   const [email, setEmail] = useState('');
@@ -23,6 +61,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<EnrichResponse | null>(null);
+  const submittingRef = useRef(false);
 
   // TODO (candidate): the in-progress flow should survive the app being
   // backgrounded or killed. If the user closes the app on the Review step,
@@ -31,15 +70,32 @@ export default function App() {
   // wire it up. Be intentional about what you persist and when you clear it.
 
   const handleSubmit = async () => {
+    if (submittingRef.current) return;
+
+    const validationError = getInputValidationError(email, website);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
+    submittingRef.current = true;
     setLoading(true);
     setError(null);
     try {
-      const data = await enrich({ email, website });
+      const data = await enrich({
+        email: email.trim(),
+        website: website.trim(),
+      });
       setResult(data);
       setStep('review');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong');
+      setError(
+        err instanceof Error && err.message
+          ? err.message
+          : 'We could not continue. Please try again.',
+      );
     } finally {
+      submittingRef.current = false;
       setLoading(false);
     }
   };
@@ -53,28 +109,40 @@ export default function App() {
     <SafeAreaProvider>
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
         <StatusBar style="auto" />
-        <ScrollView
-          contentContainerStyle={styles.scroll}
-          keyboardShouldPersistTaps="handled"
+        <KeyboardAvoidingView
+          style={styles.keyboard}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
-          {step === 'input' && (
-            <InputStep
-              email={email}
-              website={website}
-              loading={loading}
-              error={error}
-              onChangeEmail={setEmail}
-              onChangeWebsite={setWebsite}
-              onSubmit={handleSubmit}
-            />
-          )}
+          <ScrollView
+            contentContainerStyle={styles.scroll}
+            keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+            keyboardShouldPersistTaps="handled"
+          >
+            {step === 'input' && (
+              <InputStep
+                email={email}
+                website={website}
+                loading={loading}
+                error={error}
+                onChangeEmail={(value) => {
+                  setEmail(value);
+                  if (error) setError(null);
+                }}
+                onChangeWebsite={(value) => {
+                  setWebsite(value);
+                  if (error) setError(null);
+                }}
+                onSubmit={handleSubmit}
+              />
+            )}
 
-          {step === 'review' && result && (
-            <ReviewStep result={result} onConfirm={handleConfirm} />
-          )}
+            {step === 'review' && result && (
+              <ReviewStep result={result} onConfirm={handleConfirm} />
+            )}
 
-          {step === 'confirm' && <ConfirmStep />}
-        </ScrollView>
+            {step === 'confirm' && <ConfirmStep />}
+          </ScrollView>
+        </KeyboardAvoidingView>
       </SafeAreaView>
     </SafeAreaProvider>
   );
@@ -89,6 +157,8 @@ function InputStep(props: {
   onChangeWebsite: (value: string) => void;
   onSubmit: () => void;
 }) {
+  const submitDisabled = props.loading;
+
   return (
     <View>
       <Text style={styles.h1}>Company Onboarding</Text>
@@ -106,6 +176,7 @@ function InputStep(props: {
           autoCorrect={false}
           keyboardType="email-address"
           textContentType="emailAddress"
+          returnKeyType="next"
           style={styles.input}
         />
       </View>
@@ -120,22 +191,26 @@ function InputStep(props: {
           autoCorrect={false}
           keyboardType="url"
           textContentType="URL"
+          returnKeyType="done"
           style={styles.input}
+          onSubmitEditing={props.onSubmit}
         />
       </View>
 
       <Pressable
         onPress={props.onSubmit}
-        disabled={props.loading || !props.email || !props.website}
+        disabled={submitDisabled}
         style={({ pressed }) => [
           styles.button,
-          (props.loading || !props.email || !props.website) &&
-            styles.buttonDisabled,
-          pressed && styles.buttonPressed,
+          submitDisabled && styles.buttonDisabled,
+          pressed && !submitDisabled && styles.buttonPressed,
         ]}
       >
         {props.loading ? (
-          <ActivityIndicator color="#fff" />
+          <View style={styles.loadingContent}>
+            <ActivityIndicator color="#fff" />
+            <Text style={styles.buttonText}>Checking details...</Text>
+          </View>
         ) : (
           <Text style={styles.buttonText}>Continue</Text>
         )}
@@ -190,7 +265,8 @@ function ConfirmStep() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#f7f7f8' },
-  scroll: { padding: 20, paddingTop: 32 },
+  keyboard: { flex: 1 },
+  scroll: { flexGrow: 1, padding: 20, paddingTop: 32, paddingBottom: 40 },
   h1: { fontSize: 28, fontWeight: '700', marginBottom: 8, color: '#111' },
   subtitle: { fontSize: 15, color: '#555', marginBottom: 24 },
   field: { marginBottom: 16 },
@@ -203,16 +279,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 16,
+    minHeight: 50,
   },
   button: {
     backgroundColor: '#2563eb',
     borderRadius: 10,
     paddingVertical: 14,
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 52,
     marginTop: 8,
   },
   buttonDisabled: { backgroundColor: '#9bb6f0' },
   buttonPressed: { opacity: 0.85 },
+  loadingContent: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   errorBox: {
     marginTop: 16,
