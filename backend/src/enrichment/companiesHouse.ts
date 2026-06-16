@@ -272,9 +272,13 @@ export async function enrichFromCompaniesHouse(
 
     const { searchTerm, bestMatch, companyNumber, nextMatch } = selected;
 
-    if (nextMatch && nextMatch.match.score > 0) {
+    if (nextMatch && nextMatch.match.score > 0 && bestMatch.match.score < 100) {
+      const runnerUp = nextMatch.item.title ?? nextMatch.item.company_number ?? 'unknown';
+      const gap = bestMatch.match.score - nextMatch.match.score;
       response.enrichment.warnings?.push(
-        `Multiple Companies House matches found for "${searchTerm.value}"; using "${bestMatch.item.title ?? bestMatch.item.company_number}" as the best match.`
+        `Multiple Companies House matches found for "${searchTerm.value}". ` +
+          `Using "${bestMatch.item.title ?? bestMatch.item.company_number}" as the best match ` +
+          `(score gap: ${gap} over next candidate "${runnerUp}"); please verify this is the correct entity.`
       );
     }
 
