@@ -7,7 +7,9 @@ export function InputStep(props: {
   email: string;
   website: string;
   loading: boolean;
-  error: string | null;
+  emailError: string | null;
+  websiteError: string | null;
+  submitError: string | null;
   onChangeEmail: (value: string) => void;
   onChangeWebsite: (value: string) => void;
   onSubmit: () => void;
@@ -33,7 +35,11 @@ export function InputStep(props: {
           textContentType="emailAddress"
           returnKeyType="next"
           editable={!props.loading}
+          style={props.emailError ? styles.reviewFieldError : undefined}
         />
+        {props.emailError && (
+          <Text style={styles.fieldErrorText}>{props.emailError}</Text>
+        )}
       </View>
 
       <View style={styles.field}>
@@ -49,7 +55,11 @@ export function InputStep(props: {
           returnKeyType="done"
           onSubmitEditing={props.onSubmit}
           editable={!props.loading}
+          style={props.websiteError ? styles.reviewFieldError : undefined}
         />
+        {props.websiteError && (
+          <Text style={styles.fieldErrorText}>{props.websiteError}</Text>
+        )}
       </View>
 
       <Pressable
@@ -82,9 +92,9 @@ export function InputStep(props: {
         </Pressable>
       )}
 
-      {props.error && (
+      {props.submitError && (
         <View style={styles.errorBox}>
-          <Text style={styles.errorText}>{props.error}</Text>
+          <Text style={styles.errorText}>{props.submitError}</Text>
         </View>
       )}
     </View>

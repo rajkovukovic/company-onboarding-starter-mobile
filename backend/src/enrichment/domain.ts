@@ -1,4 +1,4 @@
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const EMAIL_PATTERN = /^[^\s@]+@[a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,}$/;
 
 const COMMON_SECOND_LEVEL_DOMAINS = new Set([
   'ac',
@@ -44,6 +44,10 @@ export function isValidEmail(email: string) {
  * Query strings and hashes are dropped because they do not identify the company.
  */
 export function normalizeWebsite(rawWebsite: string): NormalizedWebsite {
+  if (rawWebsite.includes('@')) {
+    throw new Error('Website must not contain an @ symbol');
+  }
+
   const withProtocol = /^https?:\/\//i.test(rawWebsite)
     ? rawWebsite
     : `https://${rawWebsite}`;

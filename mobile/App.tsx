@@ -29,7 +29,10 @@ import {
 } from "./src/persistence";
 import { styles } from "./src/styles";
 import type { CompanyData, EnrichResponse } from "./src/types";
-import { getInputValidationError } from "./src/validation";
+import {
+  getEmailValidationError,
+  getWebsiteValidationError,
+} from "./src/validation";
 
 type Step = "input" | "review" | "confirm";
 
@@ -62,7 +65,9 @@ function OnboardingFlow() {
   const [email, setEmail] = useState("");
   const [website, setWebsite] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [websiteError, setWebsiteError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [result, setResult] = useState<EnrichResponse | null>(null);
   const [editedCompany, setEditedCompany] = useState<CompanyData>({});
   const [saving, setSaving] = useState(false);
@@ -162,15 +167,15 @@ function OnboardingFlow() {
   const handleSubmit = async () => {
     if (submittingRef.current) return;
 
-    const validationError = getInputValidationError(email, website);
-    if (validationError) {
-      setError(validationError);
-      return;
-    }
+    const newEmailError = getEmailValidationError(email);
+    const newWebsiteError = getWebsiteValidationError(website);
+    setEmailError(newEmailError);
+    setWebsiteError(newWebsiteError);
+    if (newEmailError || newWebsiteError) return;
 
     submittingRef.current = true;
     setLoading(true);
-    setError(null);
+    setSubmitError(null);
 
     const controller = new AbortController();
     enrichAbortRef.current = controller;
@@ -189,7 +194,7 @@ function OnboardingFlow() {
         // User tapped Cancel — clear state silently, no error banner.
         return;
       }
-      setError(
+      setSubmitError(
         err instanceof Error && err.message
           ? err.message
           : "We could not continue. Please try again.",
@@ -244,7 +249,9 @@ function OnboardingFlow() {
     setActiveStep("input");
     setEmail("");
     setWebsite("");
-    setError(null);
+    setEmailError(null);
+    setWebsiteError(null);
+    setSubmitError(null);
     setResult(null);
     setEditedCompany({});
     setSaved(false);
@@ -312,14 +319,16 @@ function OnboardingFlow() {
               email={email}
               website={website}
               loading={loading}
-              error={error}
+              emailError={emailError}
+              websiteError={websiteError}
+              submitError={submitError}
               onChangeEmail={(value) => {
                 setEmail(value);
-                if (error) setError(null);
+                if (emailError) setEmailError(null);
               }}
               onChangeWebsite={(value) => {
                 setWebsite(value);
-                if (error) setError(null);
+                if (websiteError) setWebsiteError(null);
               }}
               onSubmit={handleSubmit}
               onCancel={handleCancelEnrich}

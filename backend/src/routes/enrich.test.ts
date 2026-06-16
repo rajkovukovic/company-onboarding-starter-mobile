@@ -233,6 +233,34 @@ test('returns 400 when website is invalid', async () => {
   });
 });
 
+test('returns 400 when website looks like an email address', async () => {
+  await withApp(async (baseUrl) => {
+    const response = await postJson(baseUrl, {
+      email: 'founder@example.com',
+      website: 'manu@seapoint.co',
+    });
+
+    assert.equal(response.statusCode, 400);
+    assert.deepEqual(response.body, {
+      error: 'A valid company website is required',
+    });
+  });
+});
+
+test('returns 400 when email contains invalid domain characters', async () => {
+  await withApp(async (baseUrl) => {
+    const response = await postJson(baseUrl, {
+      email: 'manu@seapoint,co',
+      website: 'seapoint.co',
+    });
+
+    assert.equal(response.statusCode, 400);
+    assert.deepEqual(response.body, {
+      error: 'A valid email is required',
+    });
+  });
+});
+
 test('normalizes website and uses website data when Companies House is unavailable', async () => {
   mockWebsitePage(
     'https://example.com/about',
