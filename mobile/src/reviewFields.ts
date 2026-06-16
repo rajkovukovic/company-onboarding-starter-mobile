@@ -93,3 +93,7 @@ export const REVIEW_FIELDS: ReviewFieldConfig[] = [
     placeholder: 'Status',
   },
 ];
+
+export const REGISTERED_ADDRESS_FIELDS = REVIEW_FIELDS.filter(
+  (field) => field.metadataKey === 'registeredAddress',
+);

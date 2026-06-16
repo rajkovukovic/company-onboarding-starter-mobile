@@ -101,6 +101,18 @@ export const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e5e7eb',
   },
+  reviewFieldGroup: {
+    backgroundColor: '#fff',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    gap: 10,
+  },
+  groupedReviewFields: { gap: 12 },
+  groupedReviewField: {
+    gap: 0,
+  },
   lowConfidence: {
     borderColor: '#f59e0b',
     backgroundColor: '#fffbeb',

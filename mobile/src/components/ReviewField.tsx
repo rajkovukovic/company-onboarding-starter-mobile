@@ -10,21 +10,31 @@ export function ReviewField(props: {
   metadata?: FieldEnrichment;
   value: string;
   onChange: (value: string) => void;
+  grouped?: boolean;
+  showMetadata?: boolean;
 }) {
   const isLowConfidence = props.metadata?.confidence === 'low';
+  const showMetadata = props.showMetadata ?? true;
 
   return (
-    <View style={[styles.reviewField, isLowConfidence && styles.lowConfidence]}>
+    <View
+      style={[
+        props.grouped ? styles.groupedReviewField : styles.reviewField,
+        !props.grouped && isLowConfidence && styles.lowConfidence,
+      ]}
+    >
       <View style={styles.reviewFieldHeader}>
         <Text style={styles.label}>{props.config.label}</Text>
-        <Text
-          style={[
-            styles.confidenceBadge,
-            isLowConfidence && styles.lowConfidenceBadge,
-          ]}
-        >
-          {formatConfidence(props.metadata)}
-        </Text>
+        {showMetadata ? (
+          <Text
+            style={[
+              styles.confidenceBadge,
+              isLowConfidence && styles.lowConfidenceBadge,
+            ]}
+          >
+            {formatConfidence(props.metadata)}
+          </Text>
+        ) : null}
       </View>
 
       <TextInput
@@ -38,14 +48,16 @@ export function ReviewField(props: {
         style={styles.input}
       />
 
-      <View style={styles.metadataRow}>
-        <Text style={styles.metadataText}>
-          Source: {formatSources(props.metadata)}
-        </Text>
-        {props.metadata?.reason ? (
-          <Text style={styles.reasonText}>{props.metadata.reason}</Text>
-        ) : null}
-      </View>
+      {showMetadata ? (
+        <View style={styles.metadataRow}>
+          <Text style={styles.metadataText}>
+            Source: {formatSources(props.metadata)}
+          </Text>
+          {props.metadata?.reason ? (
+            <Text style={styles.reasonText}>{props.metadata.reason}</Text>
+          ) : null}
+        </View>
+      ) : null}
     </View>
   );
 }
