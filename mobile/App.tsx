@@ -14,11 +14,107 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 import { enrich } from './src/api';
-import type { EnrichResponse } from './src/types';
+import type {
+  CompanyData,
+  CompanyField,
+  EnrichResponse,
+  FieldEnrichment,
+} from './src/types';
 
 type Step = 'input' | 'review' | 'confirm';
+type EditableCompanyField =
+  | CompanyField
+  | 'registeredAddress.line1'
+  | 'registeredAddress.line2'
+  | 'registeredAddress.city'
+  | 'registeredAddress.region'
+  | 'registeredAddress.postalCode'
+  | 'registeredAddress.country';
+type ReviewFieldConfig = {
+  key: EditableCompanyField;
+  metadataKey: CompanyField;
+  label: string;
+  placeholder: string;
+  keyboardType?: 'default' | 'numbers-and-punctuation';
+};
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const REVIEW_FIELDS: ReviewFieldConfig[] = [
+  {
+    key: 'name',
+    metadataKey: 'name',
+    label: 'Company name',
+    placeholder: 'Company name',
+  },
+  {
+    key: 'registrationNumber',
+    metadataKey: 'registrationNumber',
+    label: 'Registration number',
+    placeholder: 'Registration number',
+  },
+  {
+    key: 'registeredAddress.line1',
+    metadataKey: 'registeredAddress',
+    label: 'Registered address line 1',
+    placeholder: 'Address line 1',
+  },
+  {
+    key: 'registeredAddress.line2',
+    metadataKey: 'registeredAddress',
+    label: 'Registered address line 2',
+    placeholder: 'Address line 2',
+  },
+  {
+    key: 'registeredAddress.city',
+    metadataKey: 'registeredAddress',
+    label: 'City',
+    placeholder: 'City',
+  },
+  {
+    key: 'registeredAddress.region',
+    metadataKey: 'registeredAddress',
+    label: 'Region',
+    placeholder: 'Region',
+  },
+  {
+    key: 'registeredAddress.postalCode',
+    metadataKey: 'registeredAddress',
+    label: 'Postal code',
+    placeholder: 'Postal code',
+    keyboardType: 'numbers-and-punctuation',
+  },
+  {
+    key: 'registeredAddress.country',
+    metadataKey: 'registeredAddress',
+    label: 'Country',
+    placeholder: 'Country',
+  },
+  {
+    key: 'incorporationDate',
+    metadataKey: 'incorporationDate',
+    label: 'Incorporation date',
+    placeholder: 'YYYY-MM-DD',
+    keyboardType: 'numbers-and-punctuation',
+  },
+  {
+    key: 'companyType',
+    metadataKey: 'companyType',
+    label: 'Company type',
+    placeholder: 'Company type',
+  },
+  {
+    key: 'industry',
+    metadataKey: 'industry',
+    label: 'Industry',
+    placeholder: 'Industry',
+  },
+  {
+    key: 'status',
+    metadataKey: 'status',
+    label: 'Status',
+    placeholder: 'Status',
+  },
+];
 
 function getWebsiteValidationError(rawWebsite: string): string | null {
   const website = rawWebsite.trim();
@@ -54,6 +150,83 @@ function getInputValidationError(email: string, website: string): string | null 
   return getWebsiteValidationError(website);
 }
 
+function getCompanyFieldValue(
+  company: CompanyData,
+  key: EditableCompanyField,
+): string {
+  switch (key) {
+    case 'registeredAddress.line1':
+      return company.registeredAddress?.line1 ?? '';
+    case 'registeredAddress.line2':
+      return company.registeredAddress?.line2 ?? '';
+    case 'registeredAddress.city':
+      return company.registeredAddress?.city ?? '';
+    case 'registeredAddress.region':
+      return company.registeredAddress?.region ?? '';
+    case 'registeredAddress.postalCode':
+      return company.registeredAddress?.postalCode ?? '';
+    case 'registeredAddress.country':
+      return company.registeredAddress?.country ?? '';
+    case 'registeredAddress':
+      return '';
+    default:
+      return company[key] ?? '';
+  }
+}
+
+function updateCompanyField(
+  company: CompanyData,
+  key: EditableCompanyField,
+  value: string,
+): CompanyData {
+  switch (key) {
+    case 'registeredAddress.line1':
+      return {
+        ...company,
+        registeredAddress: { ...company.registeredAddress, line1: value },
+      };
+    case 'registeredAddress.line2':
+      return {
+        ...company,
+        registeredAddress: { ...company.registeredAddress, line2: value },
+      };
+    case 'registeredAddress.city':
+      return {
+        ...company,
+        registeredAddress: { ...company.registeredAddress, city: value },
+      };
+    case 'registeredAddress.region':
+      return {
+        ...company,
+        registeredAddress: { ...company.registeredAddress, region: value },
+      };
+    case 'registeredAddress.postalCode':
+      return {
+        ...company,
+        registeredAddress: { ...company.registeredAddress, postalCode: value },
+      };
+    case 'registeredAddress.country':
+      return {
+        ...company,
+        registeredAddress: { ...company.registeredAddress, country: value },
+      };
+    case 'registeredAddress':
+      return company;
+    default:
+      return { ...company, [key]: value };
+  }
+}
+
+function formatSources(metadata?: FieldEnrichment): string {
+  return metadata?.sources.length
+    ? metadata.sources.join(', ')
+    : 'No source returned';
+}
+
+function formatConfidence(metadata?: FieldEnrichment): string {
+  return metadata ? metadata.confidence : 'unknown';
+}
+
 export default function App() {
   const [step, setStep] = useState<Step>('input');
   const [email, setEmail] = useState('');
@@ -61,6 +234,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<EnrichResponse | null>(null);
+  const [editedCompany, setEditedCompany] = useState<CompanyData>({});
   const submittingRef = useRef(false);
 
   // TODO (candidate): the in-progress flow should survive the app being
@@ -87,6 +261,7 @@ export default function App() {
         website: website.trim(),
       });
       setResult(data);
+      setEditedCompany(data.company);
       setStep('review');
     } catch (err) {
       setError(
@@ -102,6 +277,9 @@ export default function App() {
 
   const handleConfirm = () => {
     // TODO (candidate): in a real app this would POST to a save endpoint.
+    if (result) {
+      setResult({ ...result, company: editedCompany });
+    }
     setStep('confirm');
   };
 
@@ -137,7 +315,12 @@ export default function App() {
             )}
 
             {step === 'review' && result && (
-              <ReviewStep result={result} onConfirm={handleConfirm} />
+              <ReviewStep
+                company={editedCompany}
+                enrichment={result.enrichment.fields}
+                onChangeCompany={setEditedCompany}
+                onConfirm={handleConfirm}
+              />
             )}
 
             {step === 'confirm' && <ConfirmStep />}
@@ -225,11 +408,12 @@ function InputStep(props: {
   );
 }
 
-function ReviewStep(props: { result: EnrichResponse; onConfirm: () => void }) {
-  // TODO (candidate): replace this JSON dump with a proper review UI.
-  // - Show each field with its source and confidence
-  // - Highlight low-confidence fields
-  // - Make fields editable so the user can correct mistakes
+function ReviewStep(props: {
+  company: CompanyData;
+  enrichment: EnrichResponse['enrichment']['fields'];
+  onChangeCompany: (company: CompanyData) => void;
+  onConfirm: () => void;
+}) {
   return (
     <View>
       <Text style={styles.h1}>Review your details</Text>
@@ -237,10 +421,24 @@ function ReviewStep(props: { result: EnrichResponse; onConfirm: () => void }) {
         We've pulled this in for you. Check it over before continuing.
       </Text>
 
-      <View style={styles.jsonBox}>
-        <Text style={styles.jsonText}>
-          {JSON.stringify(props.result, null, 2)}
-        </Text>
+      <View style={styles.reviewList}>
+        {REVIEW_FIELDS.map((field) => {
+          const metadata = props.enrichment[field.metadataKey];
+
+          return (
+            <ReviewField
+              key={field.key}
+              config={field}
+              metadata={metadata}
+              value={getCompanyFieldValue(props.company, field.key)}
+              onChange={(value) =>
+                props.onChangeCompany(
+                  updateCompanyField(props.company, field.key, value),
+                )
+              }
+            />
+          );
+        })}
       </View>
 
       <Pressable
@@ -249,6 +447,51 @@ function ReviewStep(props: { result: EnrichResponse; onConfirm: () => void }) {
       >
         <Text style={styles.buttonText}>Looks good</Text>
       </Pressable>
+    </View>
+  );
+}
+
+function ReviewField(props: {
+  config: ReviewFieldConfig;
+  metadata?: FieldEnrichment;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const isLowConfidence = props.metadata?.confidence === 'low';
+
+  return (
+    <View style={[styles.reviewField, isLowConfidence && styles.lowConfidence]}>
+      <View style={styles.reviewFieldHeader}>
+        <Text style={styles.label}>{props.config.label}</Text>
+        <Text
+          style={[
+            styles.confidenceBadge,
+            isLowConfidence && styles.lowConfidenceBadge,
+          ]}
+        >
+          {formatConfidence(props.metadata)}
+        </Text>
+      </View>
+
+      <TextInput
+        value={props.value}
+        onChangeText={props.onChange}
+        placeholder={props.config.placeholder}
+        autoCapitalize="words"
+        autoCorrect={false}
+        keyboardType={props.config.keyboardType ?? 'default'}
+        returnKeyType="next"
+        style={styles.input}
+      />
+
+      <View style={styles.metadataRow}>
+        <Text style={styles.metadataText}>
+          Source: {formatSources(props.metadata)}
+        </Text>
+        {props.metadata?.reason ? (
+          <Text style={styles.reasonText}>{props.metadata.reason}</Text>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -303,14 +546,42 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   errorText: { color: '#b91c1c' },
-  jsonBox: {
+  reviewList: { gap: 12, marginBottom: 16 },
+  reviewField: {
     backgroundColor: '#fff',
     padding: 12,
-    borderRadius: 10,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: '#e5e7eb',
-    marginBottom: 16,
   },
-  jsonText: { fontFamily: 'Menlo', fontSize: 12, color: '#111' },
+  lowConfidence: {
+    borderColor: '#f59e0b',
+    backgroundColor: '#fffbeb',
+  },
+  reviewFieldHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 6,
+  },
+  confidenceBadge: {
+    overflow: 'hidden',
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    backgroundColor: '#eef2ff',
+    color: '#3730a3',
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'capitalize',
+  },
+  lowConfidenceBadge: {
+    backgroundColor: '#fef3c7',
+    color: '#92400e',
+  },
+  metadataRow: { marginTop: 8, gap: 4 },
+  metadataText: { color: '#4b5563', fontSize: 12 },
+  reasonText: { color: '#6b7280', fontSize: 12, lineHeight: 17 },
   confirmBox: { paddingTop: 80, alignItems: 'center' },
 });
