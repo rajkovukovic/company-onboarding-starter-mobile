@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
   Easing,
@@ -10,32 +10,35 @@ import {
   Text,
   View,
   useWindowDimensions,
-} from 'react-native';
-import { BlurView } from 'expo-blur';
-import { StatusBar } from 'expo-status-bar';
-import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+} from "react-native";
+import { BlurView } from "expo-blur";
+import { StatusBar } from "expo-status-bar";
+import {
+  SafeAreaProvider,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 
-import { enrich } from './src/api';
-import { ConfirmStep } from './src/components/ConfirmStep';
-import { InputStep } from './src/components/InputStep';
-import { ReviewStep } from './src/components/ReviewStep';
+import { enrich } from "./src/api";
+import { ConfirmStep } from "./src/components/ConfirmStep";
+import { InputStep } from "./src/components/InputStep";
+import { ReviewStep } from "./src/components/ReviewStep";
 import {
   clearPersistedOnboardingState,
   loadPersistedOnboardingState,
   savePersistedOnboardingState,
-} from './src/persistence';
-import { styles } from './src/styles';
-import type { CompanyData, EnrichResponse } from './src/types';
-import { getInputValidationError } from './src/validation';
+} from "./src/persistence";
+import { styles } from "./src/styles";
+import type { CompanyData, EnrichResponse } from "./src/types";
+import { getInputValidationError } from "./src/validation";
 
-type Step = 'input' | 'review' | 'confirm';
+type Step = "input" | "review" | "confirm";
 
-const STEP_ORDER: Step[] = ['input', 'review', 'confirm'];
+const STEP_ORDER: Step[] = ["input", "review", "confirm"];
 
 const pageTitles: Record<Step, string> = {
-  input: 'Company Onboarding',
-  review: 'Review your details',
-  confirm: 'Confirm details',
+  input: "Company Onboarding",
+  review: "Review your details",
+  confirm: "Confirm details",
 };
 
 const SLIDE_DURATION = 300;
@@ -54,10 +57,10 @@ function OnboardingFlow() {
   const insets = useSafeAreaInsets();
   const headerHeight = insets.top + 56;
 
-  const [activeStep, setActiveStep] = useState<Step>('input');
+  const [activeStep, setActiveStep] = useState<Step>("input");
   const [leavingStep, setLeavingStep] = useState<Step | null>(null);
-  const [email, setEmail] = useState('');
-  const [website, setWebsite] = useState('');
+  const [email, setEmail] = useState("");
+  const [website, setWebsite] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<EnrichResponse | null>(null);
@@ -69,6 +72,7 @@ function OnboardingFlow() {
   const reviewScrollViewRef = useRef<ScrollView>(null);
   const submittingRef = useRef(false);
   const savingRef = useRef(false);
+  const enrichAbortRef = useRef<AbortController | null>(null);
   const isAnimatingRef = useRef(false);
   const persistencePromiseRef = useRef<Promise<void>>(Promise.resolve());
   const enteringTranslateX = useRef(new Animated.Value(0)).current;
@@ -102,7 +106,7 @@ function OnboardingFlow() {
   }, []);
 
   useEffect(() => {
-    if (!hasRestoredState || activeStep === 'confirm') return;
+    if (!hasRestoredState || activeStep === "confirm") return;
 
     persistencePromiseRef.current = persistencePromiseRef.current
       .catch(() => undefined)
@@ -165,30 +169,43 @@ function OnboardingFlow() {
     submittingRef.current = true;
     setLoading(true);
     setError(null);
+
+    const controller = new AbortController();
+    enrichAbortRef.current = controller;
+
     try {
-      const data = await enrich({
-        email: email.trim(),
-        website: website.trim(),
-      });
+      const data = await enrich(
+        { email: email.trim(), website: website.trim() },
+        controller.signal,
+      );
       setResult(data);
       setEditedCompany(data.company);
       setSaved(false);
-      navigateTo('review');
+      navigateTo("review");
     } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") {
+        // User tapped Cancel — clear state silently, no error banner.
+        return;
+      }
       setError(
         err instanceof Error && err.message
           ? err.message
-          : 'We could not continue. Please try again.',
+          : "We could not continue. Please try again.",
       );
     } finally {
+      enrichAbortRef.current = null;
       submittingRef.current = false;
       setLoading(false);
     }
   };
 
+  const handleCancelEnrich = () => {
+    enrichAbortRef.current?.abort();
+  };
+
   const handleReviewConfirm = () => {
     setSaved(false);
-    navigateTo('confirm');
+    navigateTo("confirm");
   };
 
   const handleConfirm = async () => {
@@ -224,9 +241,9 @@ function OnboardingFlow() {
 
     await clearPersistedOnboardingState();
     setLeavingStep(null);
-    setActiveStep('input');
-    setEmail('');
-    setWebsite('');
+    setActiveStep("input");
+    setEmail("");
+    setWebsite("");
     setError(null);
     setResult(null);
     setEditedCompany({});
@@ -238,19 +255,21 @@ function OnboardingFlow() {
   const handleBack = () => {
     if (saving || saved) return;
 
-    if (activeStep === 'confirm') {
-      navigateTo(result ? 'review' : 'input');
+    if (activeStep === "confirm") {
+      navigateTo(result ? "review" : "input");
       return;
     }
 
-    if (activeStep === 'review') {
-      navigateTo('input');
+    if (activeStep === "review") {
+      navigateTo("input");
     }
   };
 
-  const canGoBack = activeStep !== 'input' && !saved && !saving;
+  const canGoBack = activeStep !== "input" && !saved && !saving;
   const pageTitle =
-    activeStep === 'confirm' && saved ? "You're all set" : pageTitles[activeStep];
+    activeStep === "confirm" && saved
+      ? "You're all set"
+      : pageTitles[activeStep];
 
   if (!hasRestoredState) {
     return (
@@ -265,24 +284,30 @@ function OnboardingFlow() {
     paddingBottom: insets.bottom + 40,
   };
 
-  const renderScreen = (step: Step, translateX: Animated.Value, isLeaving: boolean) => (
+  const renderScreen = (
+    step: Step,
+    translateX: Animated.Value,
+    isLeaving: boolean,
+  ) => (
     <Animated.View
       key={step}
       style={[slideStyles.screen, { transform: [{ translateX }] }]}
-      pointerEvents={isLeaving ? 'none' : 'box-none'}
+      pointerEvents={isLeaving ? "none" : "box-none"}
     >
       <KeyboardAvoidingView
         style={slideStyles.fill}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <ScrollView
-          ref={step === 'review' ? reviewScrollViewRef : undefined}
+          ref={step === "review" ? reviewScrollViewRef : undefined}
           contentContainerStyle={[styles.scroll, scrollPadding]}
           contentInsetAdjustmentBehavior="never"
-          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          keyboardDismissMode={
+            Platform.OS === "ios" ? "interactive" : "on-drag"
+          }
           keyboardShouldPersistTaps="handled"
         >
-          {step === 'input' && (
+          {step === "input" && (
             <InputStep
               email={email}
               website={website}
@@ -297,10 +322,11 @@ function OnboardingFlow() {
                 if (error) setError(null);
               }}
               onSubmit={handleSubmit}
+              onCancel={handleCancelEnrich}
             />
           )}
 
-          {step === 'review' && result && (
+          {step === "review" && result && (
             <ReviewStep
               company={editedCompany}
               enrichment={result.enrichment.fields}
@@ -312,7 +338,7 @@ function OnboardingFlow() {
             />
           )}
 
-          {step === 'confirm' && result && (
+          {step === "confirm" && result && (
             <ConfirmStep
               company={editedCompany}
               input={result.input}
@@ -331,7 +357,8 @@ function OnboardingFlow() {
     <View style={styles.safe}>
       <StatusBar style="auto" />
       <View style={slideStyles.container}>
-        {leavingStep !== null && renderScreen(leavingStep, leavingTranslateX, true)}
+        {leavingStep !== null &&
+          renderScreen(leavingStep, leavingTranslateX, true)}
         {renderScreen(activeStep, enteringTranslateX, false)}
       </View>
       <BlurView
@@ -354,7 +381,7 @@ function OnboardingFlow() {
 const slideStyles = StyleSheet.create({
   container: {
     flex: 1,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   screen: {
     ...StyleSheet.absoluteFillObject,
@@ -378,7 +405,7 @@ function PageHeader(props: { title: string; onBack?: () => void }) {
             pressed && styles.pressedFade,
           ]}
         >
-          <Text style={styles.headerBackText}>{'‹'}</Text>
+          <Text style={styles.headerBackText}>{"‹"}</Text>
         </Pressable>
       ) : (
         <View style={styles.headerBackButtonPlaceholder} />

@@ -110,6 +110,9 @@ export const styles = StyleSheet.create({
     backgroundColor: palette.surface,
     borderColor: palette.brand,
   },
+  inputDisabled: {
+    opacity: 0.5,
+  },
   inputMultiline: {
     minHeight: 52,
     textAlignVertical: 'top',
@@ -129,6 +132,16 @@ export const styles = StyleSheet.create({
   pressedFade: { opacity: 0.6 },
   loadingContent: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   buttonText: { color: '#fff', fontSize: 16, fontWeight: '700', letterSpacing: 0.2 },
+  cancelButton: {
+    marginTop: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  cancelButtonText: {
+    color: palette.textMuted,
+    fontSize: 15,
+    fontWeight: '500',
+  },
   errorBox: {
     marginTop: 16,
     padding: 14,

@@ -32,12 +32,19 @@ async function readErrorMessage(response: Response): Promise<string> {
   return 'We could not enrich those company details. Please try again.';
 }
 
-export async function enrich(input: {
-  email: string;
-  website: string;
-}): Promise<EnrichResponse> {
+export async function enrich(
+  input: { email: string; website: string },
+  externalSignal?: AbortSignal,
+): Promise<EnrichResponse> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), ENRICH_TIMEOUT_MS);
+  let timedOut = false;
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, ENRICH_TIMEOUT_MS);
+
+  // Propagate an external cancellation signal (e.g. user pressing Cancel).
+  externalSignal?.addEventListener('abort', () => controller.abort(), { once: true });
 
   try {
     const response = await fetch(`${API_URL}/enrich`, {
@@ -58,7 +65,11 @@ export async function enrich(input: {
     }
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error('The enrichment request timed out. Please try again.');
+      if (timedOut) {
+        throw new Error('The enrichment request timed out. Please try again.');
+      }
+      // Re-throw the original AbortError so callers can distinguish user cancellation.
+      throw error;
     }
 
     if (error instanceof TypeError) {

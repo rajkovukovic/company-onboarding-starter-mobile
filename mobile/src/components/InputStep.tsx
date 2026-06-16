@@ -11,6 +11,7 @@ export function InputStep(props: {
   onChangeEmail: (value: string) => void;
   onChangeWebsite: (value: string) => void;
   onSubmit: () => void;
+  onCancel: () => void;
 }) {
   const submitDisabled = props.loading;
 
@@ -31,6 +32,7 @@ export function InputStep(props: {
           keyboardType="email-address"
           textContentType="emailAddress"
           returnKeyType="next"
+          editable={!props.loading}
         />
       </View>
 
@@ -46,6 +48,7 @@ export function InputStep(props: {
           textContentType="URL"
           returnKeyType="done"
           onSubmitEditing={props.onSubmit}
+          editable={!props.loading}
         />
       </View>
 
@@ -67,6 +70,17 @@ export function InputStep(props: {
           <Text style={styles.buttonText}>Continue</Text>
         )}
       </Pressable>
+
+      {props.loading && (
+        <Pressable
+          onPress={props.onCancel}
+          style={({ pressed }) => [styles.cancelButton, pressed && styles.pressedFade]}
+          accessibilityRole="button"
+          accessibilityLabel="Cancel enrichment"
+        >
+          <Text style={styles.cancelButtonText}>Cancel</Text>
+        </Pressable>
+      )}
 
       {props.error && (
         <View style={styles.errorBox}>
