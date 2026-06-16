@@ -5,9 +5,9 @@ import { REVIEW_FIELDS } from '../reviewFields';
 import { styles } from '../styles';
 import type { CompanyData, NormalizedEnrichInput } from '../types';
 
-function displayValue(value: string | undefined) {
-  const trimmedValue = value?.trim();
-  return trimmedValue ? trimmedValue : 'Not provided';
+function resolveValue(value: string | undefined): { text: string; empty: boolean } {
+  const trimmed = value?.trim();
+  return trimmed ? { text: trimmed, empty: false } : { text: 'Not provided', empty: true };
 }
 
 export function ConfirmStep(props: {
@@ -25,7 +25,7 @@ export function ConfirmStep(props: {
           <Text style={styles.successIcon}>OK</Text>
           <Text style={styles.successTitle}>Company details saved</Text>
           <Text style={styles.successText}>
-            {displayValue(props.company.name)} is ready to continue onboarding.
+            {resolveValue(props.company.name).text} is ready to continue onboarding.
           </Text>
         </View>
 
@@ -67,14 +67,21 @@ export function ConfirmStep(props: {
 
       <View style={styles.confirmSection}>
         <Text style={styles.confirmSectionTitle}>Company details</Text>
-        {REVIEW_FIELDS.map((field) => (
-          <View key={field.key} style={styles.confirmRow}>
-            <Text style={styles.confirmLabel}>{field.label}</Text>
-            <Text style={styles.confirmValue}>
-              {displayValue(getCompanyFieldValue(props.company, field.key))}
-            </Text>
-          </View>
-        ))}
+        {REVIEW_FIELDS.map((field) => {
+          const { text, empty } = resolveValue(
+            getCompanyFieldValue(props.company, field.key),
+          );
+          return (
+            <View key={field.key} style={styles.confirmRow}>
+              <Text style={styles.confirmLabel}>{field.label}</Text>
+              <Text
+                style={empty ? styles.confirmValueEmpty : styles.confirmValue}
+              >
+                {text}
+              </Text>
+            </View>
+          );
+        })}
       </View>
 
       <Pressable
