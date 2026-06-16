@@ -16,9 +16,23 @@ const LEVEL_CONFIG: Record<
 
 export function ConfidenceIndicator({
   confidence,
+  isEdited,
 }: {
   confidence?: Confidence;
+  isEdited?: boolean;
 }) {
+  if (isEdited) {
+    return (
+      <View
+        style={styles.confidencePillEdited}
+        accessible
+        accessibilityLabel="Edited by you"
+      >
+        <Text style={styles.confidenceLabelEdited}>Edited by you</Text>
+      </View>
+    );
+  }
+
   if (!confidence) return null;
 
   const effectiveConfidence: NonNullable<Confidence> = confidence;

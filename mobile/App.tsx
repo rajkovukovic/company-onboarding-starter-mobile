@@ -329,6 +329,7 @@ function OnboardingFlow() {
           {step === "review" && result && (
             <ReviewStep
               company={editedCompany}
+              originalCompany={result.company}
               enrichment={result.enrichment.fields}
               warnings={result.enrichment.warnings}
               onChangeCompany={setEditedCompany}

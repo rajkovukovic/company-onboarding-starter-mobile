@@ -14,6 +14,7 @@ import { ReviewField } from './ReviewField';
 
 export function ReviewStep(props: {
   company: CompanyData;
+  originalCompany: CompanyData;
   enrichment: EnrichResponse['enrichment']['fields'];
   warnings?: string[];
   onChangeCompany: (company: CompanyData) => void;
@@ -26,6 +27,14 @@ export function ReviewStep(props: {
   const addressGroupRef = useRef<View | null>(null);
   const warnings = props.warnings?.filter(Boolean) ?? [];
   const registeredAddressMetadata = props.enrichment.registeredAddress;
+
+  const isFieldEdited = (key: Parameters<typeof getCompanyFieldValue>[1]) =>
+    getCompanyFieldValue(props.company, key) !==
+    getCompanyFieldValue(props.originalCompany, key);
+
+  const isAddressGroupEdited = REGISTERED_ADDRESS_FIELDS.some((f) =>
+    isFieldEdited(f.key),
+  );
 
   const emptyRequiredKeys = submitted
     ? new Set(
@@ -74,7 +83,10 @@ export function ReviewStep(props: {
     >
       <View style={styles.reviewFieldHeader}>
         <Text style={styles.label}>Registered address</Text>
-        <ConfidenceIndicator confidence={registeredAddressMetadata?.confidence} />
+        <ConfidenceIndicator
+          confidence={registeredAddressMetadata?.confidence}
+          isEdited={isAddressGroupEdited}
+        />
       </View>
 
       <View style={styles.groupedReviewFields}>
@@ -96,16 +108,18 @@ export function ReviewStep(props: {
         ))}
       </View>
 
-      <View style={styles.metadataRow}>
-        <Text style={styles.metadataText}>
-          Source: {formatSources(registeredAddressMetadata)}
-        </Text>
-        {registeredAddressMetadata?.reason ? (
-          <Text style={styles.reasonText}>
-            {registeredAddressMetadata.reason}
+      {!isAddressGroupEdited ? (
+        <View style={styles.metadataRow}>
+          <Text style={styles.metadataText}>
+            Source: {formatSources(registeredAddressMetadata)}
           </Text>
-        ) : null}
-      </View>
+          {registeredAddressMetadata?.reason ? (
+            <Text style={styles.reasonText}>
+              {registeredAddressMetadata.reason}
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
     </View>
   );
 
@@ -143,6 +157,7 @@ export function ReviewStep(props: {
               metadata={metadata}
               value={getCompanyFieldValue(props.company, field.key)}
               hasError={emptyRequiredKeys.has(field.key)}
+              isEdited={isFieldEdited(field.key)}
               viewRef={(ref: View | null) => {
                 fieldRefs.current[field.key] = ref;
               }}

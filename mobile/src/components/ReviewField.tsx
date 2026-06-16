@@ -135,6 +135,7 @@ export function ReviewField(props: {
   grouped?: boolean;
   showMetadata?: boolean;
   hasError?: boolean;
+  isEdited?: boolean;
   viewRef?: Ref<View>;
 }) {
   const showMetadata = props.showMetadata ?? true;
@@ -155,7 +156,10 @@ export function ReviewField(props: {
           ) : null}
         </Text>
         {showMetadata ? (
-          <ConfidenceIndicator confidence={props.metadata?.confidence} />
+          <ConfidenceIndicator
+            confidence={props.metadata?.confidence}
+            isEdited={props.isEdited}
+          />
         ) : null}
       </View>
 
@@ -185,7 +189,7 @@ export function ReviewField(props: {
         <Text style={styles.fieldErrorText}>This field is required.</Text>
       ) : null}
 
-      {showMetadata ? (
+      {showMetadata && !props.isEdited ? (
         <View style={styles.metadataRow}>
           <Text style={styles.metadataText}>
             Source: {formatSources(props.metadata)}
