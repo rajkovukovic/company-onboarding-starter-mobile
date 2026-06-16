@@ -1,11 +1,15 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Animated,
+  Easing,
   KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
+  StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { StatusBar } from 'expo-status-bar';
@@ -26,11 +30,16 @@ import { getInputValidationError } from './src/validation';
 
 type Step = 'input' | 'review' | 'confirm';
 
+const STEP_ORDER: Step[] = ['input', 'review', 'confirm'];
+
 const pageTitles: Record<Step, string> = {
   input: 'Company Onboarding',
   review: 'Review your details',
   confirm: 'Confirm details',
 };
+
+const SLIDE_DURATION = 300;
+const SLIDE_EASING = Easing.bezier(0.25, 0.46, 0.45, 0.94);
 
 export default function App() {
   return (
@@ -41,9 +50,12 @@ export default function App() {
 }
 
 function OnboardingFlow() {
+  const { width: screenWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const headerHeight = insets.top + 56;
-  const [step, setStep] = useState<Step>('input');
+
+  const [activeStep, setActiveStep] = useState<Step>('input');
+  const [leavingStep, setLeavingStep] = useState<Step | null>(null);
   const [email, setEmail] = useState('');
   const [website, setWebsite] = useState('');
   const [loading, setLoading] = useState(false);
@@ -53,10 +65,14 @@ function OnboardingFlow() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [hasRestoredState, setHasRestoredState] = useState(false);
-  const scrollViewRef = useRef<ScrollView>(null);
+
+  const reviewScrollViewRef = useRef<ScrollView>(null);
   const submittingRef = useRef(false);
   const savingRef = useRef(false);
+  const isAnimatingRef = useRef(false);
   const persistencePromiseRef = useRef<Promise<void>>(Promise.resolve());
+  const enteringTranslateX = useRef(new Animated.Value(0)).current;
+  const leavingTranslateX = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     let cancelled = false;
@@ -70,7 +86,7 @@ function OnboardingFlow() {
         setWebsite(persistedState.website);
         setResult(persistedState.result);
         setEditedCompany(persistedState.editedCompany);
-        setStep(persistedState.step);
+        setActiveStep(persistedState.step);
       }
 
       setHasRestoredState(true);
@@ -86,29 +102,56 @@ function OnboardingFlow() {
   }, []);
 
   useEffect(() => {
-    if (!hasRestoredState || step === 'confirm') return;
+    if (!hasRestoredState || activeStep === 'confirm') return;
 
     persistencePromiseRef.current = persistencePromiseRef.current
       .catch(() => undefined)
       .then(() =>
         savePersistedOnboardingState({
           version: 1,
-          step,
+          step: activeStep,
           email,
           website,
           result,
           editedCompany,
         }),
       );
-  }, [editedCompany, email, hasRestoredState, result, step, website]);
+  }, [editedCompany, email, hasRestoredState, result, activeStep, website]);
 
-  useEffect(() => {
-    const frame = requestAnimationFrame(() => {
-      scrollViewRef.current?.scrollTo({ x: 0, y: 0, animated: false });
-    });
+  const navigateTo = useCallback(
+    (newStep: Step) => {
+      if (isAnimatingRef.current) return;
 
-    return () => cancelAnimationFrame(frame);
-  }, [step]);
+      const direction =
+        STEP_ORDER.indexOf(newStep) > STEP_ORDER.indexOf(activeStep) ? 1 : -1;
+
+      isAnimatingRef.current = true;
+      enteringTranslateX.setValue(direction * screenWidth);
+      leavingTranslateX.setValue(0);
+      setLeavingStep(activeStep);
+      setActiveStep(newStep);
+
+      Animated.parallel([
+        Animated.timing(enteringTranslateX, {
+          toValue: 0,
+          duration: SLIDE_DURATION,
+          easing: SLIDE_EASING,
+          useNativeDriver: true,
+        }),
+        Animated.timing(leavingTranslateX, {
+          toValue: -direction * screenWidth,
+          duration: SLIDE_DURATION,
+          easing: SLIDE_EASING,
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        setLeavingStep(null);
+        enteringTranslateX.setValue(0);
+        isAnimatingRef.current = false;
+      });
+    },
+    [activeStep, screenWidth, enteringTranslateX, leavingTranslateX],
+  );
 
   const handleSubmit = async () => {
     if (submittingRef.current) return;
@@ -130,7 +173,7 @@ function OnboardingFlow() {
       setResult(data);
       setEditedCompany(data.company);
       setSaved(false);
-      setStep('review');
+      navigateTo('review');
     } catch (err) {
       setError(
         err instanceof Error && err.message
@@ -145,7 +188,7 @@ function OnboardingFlow() {
 
   const handleReviewConfirm = () => {
     setSaved(false);
-    setStep('confirm');
+    navigateTo('confirm');
   };
 
   const handleConfirm = async () => {
@@ -173,8 +216,15 @@ function OnboardingFlow() {
   };
 
   const handleStartOver = async () => {
+    enteringTranslateX.stopAnimation();
+    leavingTranslateX.stopAnimation();
+    enteringTranslateX.setValue(0);
+    leavingTranslateX.setValue(0);
+    isAnimatingRef.current = false;
+
     await clearPersistedOnboardingState();
-    setStep('input');
+    setLeavingStep(null);
+    setActiveStep('input');
     setEmail('');
     setWebsite('');
     setError(null);
@@ -188,18 +238,19 @@ function OnboardingFlow() {
   const handleBack = () => {
     if (saving || saved) return;
 
-    if (step === 'confirm') {
-      setStep(result ? 'review' : 'input');
+    if (activeStep === 'confirm') {
+      navigateTo(result ? 'review' : 'input');
       return;
     }
 
-    if (step === 'review') {
-      setStep('input');
+    if (activeStep === 'review') {
+      navigateTo('input');
     }
   };
 
-  const canGoBack = step !== 'input' && !saved && !saving;
-  const pageTitle = step === 'confirm' && saved ? "You're all set" : pageTitles[step];
+  const canGoBack = activeStep !== 'input' && !saved && !saving;
+  const pageTitle =
+    activeStep === 'confirm' && saved ? "You're all set" : pageTitles[activeStep];
 
   if (!hasRestoredState) {
     return (
@@ -209,22 +260,24 @@ function OnboardingFlow() {
     );
   }
 
-  return (
-    <View style={styles.safe}>
-      <StatusBar style="auto" />
+  const scrollPadding = {
+    paddingTop: headerHeight + 24,
+    paddingBottom: insets.bottom + 40,
+  };
+
+  const renderScreen = (step: Step, translateX: Animated.Value, isLeaving: boolean) => (
+    <Animated.View
+      key={step}
+      style={[slideStyles.screen, { transform: [{ translateX }] }]}
+      pointerEvents={isLeaving ? 'none' : 'box-none'}
+    >
       <KeyboardAvoidingView
-        style={styles.keyboard}
+        style={slideStyles.fill}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView
-          ref={scrollViewRef}
-          contentContainerStyle={[
-            styles.scroll,
-            {
-              paddingTop: headerHeight + 24,
-              paddingBottom: insets.bottom + 40,
-            },
-          ]}
+          ref={step === 'review' ? reviewScrollViewRef : undefined}
+          contentContainerStyle={[styles.scroll, scrollPadding]}
           contentInsetAdjustmentBehavior="never"
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           keyboardShouldPersistTaps="handled"
@@ -254,7 +307,7 @@ function OnboardingFlow() {
               warnings={result.enrichment.warnings}
               onChangeCompany={setEditedCompany}
               onConfirm={handleReviewConfirm}
-              scrollViewRef={scrollViewRef}
+              scrollViewRef={reviewScrollViewRef}
               scrollTopOffset={headerHeight}
             />
           )}
@@ -271,6 +324,16 @@ function OnboardingFlow() {
           )}
         </ScrollView>
       </KeyboardAvoidingView>
+    </Animated.View>
+  );
+
+  return (
+    <View style={styles.safe}>
+      <StatusBar style="auto" />
+      <View style={slideStyles.container}>
+        {leavingStep !== null && renderScreen(leavingStep, leavingTranslateX, true)}
+        {renderScreen(activeStep, enteringTranslateX, false)}
+      </View>
       <BlurView
         intensity={70}
         tint="light"
@@ -287,6 +350,19 @@ function OnboardingFlow() {
     </View>
   );
 }
+
+const slideStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    overflow: 'hidden',
+  },
+  screen: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  fill: {
+    flex: 1,
+  },
+});
 
 function PageHeader(props: { title: string; onBack?: () => void }) {
   return (
