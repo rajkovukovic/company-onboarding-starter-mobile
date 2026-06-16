@@ -5,6 +5,7 @@ import type {
   EnrichmentSource,
 } from '../../../shared/src/enrichment';
 
+import { logEnrichmentDebug } from './debugLogger';
 import { setField } from './response';
 
 type CompaniesHouseSearchItem = {
@@ -153,6 +154,21 @@ async function getCompaniesHouse<T>(path: string): Promise<T> {
       Accept: 'application/json',
     },
   });
+  const bodyText = await response.text();
+  let body: unknown;
+
+  try {
+    body = bodyText ? JSON.parse(bodyText) : undefined;
+  } catch {
+    body = bodyText;
+  }
+
+  logEnrichmentDebug('companies_house_response', {
+    path,
+    status: response.status,
+    ok: response.ok,
+    body,
+  });
 
   if (!response.ok) {
     throw new CompaniesHouseRequestError(
@@ -161,7 +177,7 @@ async function getCompaniesHouse<T>(path: string): Promise<T> {
     );
   }
 
-  return response.json() as Promise<T>;
+  return body as T;
 }
 
 /**
@@ -229,6 +245,10 @@ export async function enrichFromCompaniesHouse(
           match: scoreCompaniesHouseMatch(item, searchTerm),
         }))
         .sort((a, b) => b.match.score - a.match.score);
+      logEnrichmentDebug('companies_house_ranked_matches', {
+        searchTerm,
+        rankedMatches,
+      });
       const bestMatch = rankedMatches[0];
 
       if (bestMatch && bestMatch.match.score > 0 && bestMatch.item.company_number) {

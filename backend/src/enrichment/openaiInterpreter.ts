@@ -1,5 +1,6 @@
 import type { Confidence, EnrichResponse } from '../../../shared/src/enrichment';
 
+import { logEnrichmentDebug } from './debugLogger';
 import type { NormalizedWebsite } from './domain';
 import { setField } from './response';
 import type { WebsiteEvidence } from './website';
@@ -179,12 +180,26 @@ async function requestWebsiteInterpretation(
       }),
       signal: controller.signal,
     });
+    const bodyText = await response.text();
+    let payload: any;
+
+    try {
+      payload = bodyText ? JSON.parse(bodyText) : undefined;
+    } catch {
+      payload = bodyText;
+    }
+
+    logEnrichmentDebug('openai_response', {
+      model: getOpenAIModel(),
+      status: response.status,
+      ok: response.ok,
+      body: payload,
+    });
 
     if (!response.ok) {
       throw new Error(`OpenAI returned ${response.status}`);
     }
 
-    const payload = await response.json();
     const text = extractResponseText(payload);
     if (!text) {
       throw new Error('OpenAI returned no structured output');
@@ -194,6 +209,7 @@ async function requestWebsiteInterpretation(
     if (!interpretation) {
       throw new Error('OpenAI returned invalid website interpretation');
     }
+    logEnrichmentDebug('openai_website_interpretation', interpretation);
 
     return interpretation;
   } catch (error) {
