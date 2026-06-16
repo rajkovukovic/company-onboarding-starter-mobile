@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -13,6 +13,11 @@ import { enrich } from './src/api';
 import { ConfirmStep } from './src/components/ConfirmStep';
 import { InputStep } from './src/components/InputStep';
 import { ReviewStep } from './src/components/ReviewStep';
+import {
+  clearPersistedOnboardingState,
+  loadPersistedOnboardingState,
+  savePersistedOnboardingState,
+} from './src/persistence';
 import { styles } from './src/styles';
 import type { CompanyData, EnrichResponse } from './src/types';
 import { getInputValidationError } from './src/validation';
@@ -36,13 +41,53 @@ function OnboardingFlow() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<EnrichResponse | null>(null);
   const [editedCompany, setEditedCompany] = useState<CompanyData>({});
+  const [hasRestoredState, setHasRestoredState] = useState(false);
   const submittingRef = useRef(false);
+  const persistencePromiseRef = useRef<Promise<void>>(Promise.resolve());
 
-  // TODO (candidate): the in-progress flow should survive the app being
-  // backgrounded or killed. If the user closes the app on the Review step,
-  // they should resume there (with their edits) when they reopen it.
-  // Pick a persistence library (AsyncStorage, MMKV, SecureStore...) and
-  // wire it up. Be intentional about what you persist and when you clear it.
+  useEffect(() => {
+    let cancelled = false;
+
+    async function restoreState() {
+      const persistedState = await loadPersistedOnboardingState();
+      if (cancelled) return;
+
+      if (persistedState) {
+        setEmail(persistedState.email);
+        setWebsite(persistedState.website);
+        setResult(persistedState.result);
+        setEditedCompany(persistedState.editedCompany);
+        setStep(persistedState.step);
+      }
+
+      setHasRestoredState(true);
+    }
+
+    restoreState().catch(() => {
+      if (!cancelled) setHasRestoredState(true);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!hasRestoredState || step === 'confirm') return;
+
+    persistencePromiseRef.current = persistencePromiseRef.current
+      .catch(() => undefined)
+      .then(() =>
+        savePersistedOnboardingState({
+          version: 1,
+          step,
+          email,
+          website,
+          result,
+          editedCompany,
+        }),
+      );
+  }, [editedCompany, email, hasRestoredState, result, step, website]);
 
   const handleSubmit = async () => {
     if (submittingRef.current) return;
@@ -76,13 +121,30 @@ function OnboardingFlow() {
     }
   };
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     // TODO (candidate): in a real app this would POST to a save endpoint.
-    if (result) {
-      setResult({ ...result, company: editedCompany });
+    const confirmedResult = result
+      ? { ...result, company: editedCompany }
+      : result;
+
+    try {
+      await persistencePromiseRef.current.catch(() => undefined);
+      await clearPersistedOnboardingState();
+    } finally {
+      if (confirmedResult) {
+        setResult(confirmedResult);
+      }
+      setStep('confirm');
     }
-    setStep('confirm');
   };
+
+  if (!hasRestoredState) {
+    return (
+      <View style={styles.safe}>
+        <StatusBar style="auto" />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.safe}>
