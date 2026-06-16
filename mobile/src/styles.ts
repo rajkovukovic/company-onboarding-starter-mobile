@@ -3,7 +3,13 @@ import { StyleSheet } from 'react-native';
 export const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#f7f7f8' },
   keyboard: { flex: 1 },
-  scroll: { flexGrow: 1, padding: 20, paddingTop: 32, paddingBottom: 40 },
+  scroll: { flexGrow: 1, paddingHorizontal: 20 },
+  topBlur: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    left: 0,
+  },
   h1: { fontSize: 28, fontWeight: '700', marginBottom: 8, color: '#111' },
   subtitle: { fontSize: 15, color: '#555', marginBottom: 24 },
   field: { marginBottom: 16 },
