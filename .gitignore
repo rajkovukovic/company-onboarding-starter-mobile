@@ -25,3 +25,12 @@ npm-debug.*
 yarn-debug.*
 yarn-error.*
 *.log
+
+
+# Tooling
+.headroom/
+.serena/
+
+# other files
+/TASK.md
+/PLAN.md
