@@ -1,49 +1,14 @@
 import { Router, Request, Response } from 'express';
 
+import type {
+  CompanyData,
+  CompanyField,
+  Confidence,
+  EnrichRequest,
+  EnrichResponse,
+} from '../../../shared/src/enrichment';
+
 const router = Router();
-
-type EnrichRequest = {
-  email: string;
-  website: string;
-};
-
-type CompanyData = {
-  name?: string;
-  website?: string;
-  domain?: string;
-  registrationNumber?: string;
-  registeredAddress?: {
-    line1?: string;
-    line2?: string;
-    city?: string;
-    region?: string;
-    postalCode?: string;
-    country?: string;
-  };
-  incorporationDate?: string;
-  companyType?: string;
-  industry?: string;
-  status?: string;
-};
-
-type EnrichmentMetadata = {
-  sources: string[];
-  confidence: Record<string, 'high' | 'medium' | 'low'>;
-  fields: Record<
-    string,
-    {
-      sources: string[];
-      confidence: 'high' | 'medium' | 'low';
-      reason: string;
-    }
-  >;
-  warnings?: string[];
-};
-
-type EnrichResponse = {
-  company: CompanyData;
-  enrichment: EnrichmentMetadata;
-};
 
 type CompaniesHouseSearchItem = {
   title?: string;
@@ -75,8 +40,6 @@ type CompaniesHouseAddress = {
   postal_code?: string;
   country?: string;
 };
-
-type FieldConfidence = 'high' | 'medium' | 'low';
 
 const COMPANIES_HOUSE_BASE_URL =
   'https://api.company-information.service.gov.uk';
@@ -176,7 +139,7 @@ function normalizeCompanyName(value: string): string[] {
 function scoreCompaniesHouseMatch(
   item: CompaniesHouseSearchItem,
   searchTerm: string
-): { score: number; confidence: FieldConfidence; reason: string } {
+): { score: number; confidence: Confidence; reason: string } {
   const titleTokens = normalizeCompanyName(item.title ?? '');
   const searchTokens = normalizeCompanyName(searchTerm);
   const title = titleTokens.join(' ');
@@ -263,16 +226,15 @@ function mapCompaniesHouseAddress(
 }
 
 /**
- * Records legacy confidence metadata plus the richer per-field explanation
- * required by the assessment review criteria.
+ * Records the field-level source, confidence, and explanation required by the
+ * assessment review criteria.
  */
 function setField(
   response: EnrichResponse,
-  field: string,
-  confidence: FieldConfidence,
+  field: CompanyField,
+  confidence: Confidence,
   reason: string
 ) {
-  response.enrichment.confidence[field] = confidence;
   response.enrichment.fields[field] = {
     sources: ['Companies House'],
     confidence,
@@ -299,13 +261,14 @@ router.post('/', async (req: Request<{}, {}, EnrichRequest>, res: Response) => {
   }
 
   const response: EnrichResponse = {
-    company: {
+    input: {
+      email: email.trim(),
       website: normalizedWebsite.website,
       domain: normalizedWebsite.domain,
     },
+    company: {},
     enrichment: {
       sources: [],
-      confidence: {},
       fields: {},
       warnings: [],
     },
@@ -338,7 +301,6 @@ router.post('/', async (req: Request<{}, {}, EnrichRequest>, res: Response) => {
     response.enrichment.sources.push('Companies House');
 
     const company: CompanyData = {
-      ...response.company,
       name: profile.company_name ?? bestMatch.item.title,
       registrationNumber:
         profile.company_number ?? bestMatch.item.company_number,

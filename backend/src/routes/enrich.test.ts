@@ -171,10 +171,14 @@ test('normalizes website and returns a warning when Companies House is unavailab
     });
 
     assert.equal(response.statusCode, 200);
-    assert.equal(response.body.company.website, 'https://example.com/about');
-    assert.equal(response.body.company.domain, 'example.com');
+    assert.deepEqual(response.body.input, {
+      email: 'founder@example.com',
+      website: 'https://example.com/about',
+      domain: 'example.com',
+    });
+    assert.deepEqual(response.body.company, {});
     assert.deepEqual(response.body.enrichment.sources, []);
-    assert.deepEqual(response.body.enrichment.confidence, {});
+    assert.deepEqual(response.body.enrichment.fields, {});
     assert.match(
       response.body.enrichment.warnings[0],
       /COMPANIES_HOUSE_API_KEY is not configured/
@@ -224,9 +228,12 @@ test('maps a high-confidence Companies House match into structured company data'
       '/search/companies?q=acme&items_per_page=5',
       '/company/12345678',
     ]);
-    assert.deepEqual(response.body.company, {
+    assert.deepEqual(response.body.input, {
+      email: 'founder@example.com',
       website: 'https://acme.co.uk',
       domain: 'acme.co.uk',
+    });
+    assert.deepEqual(response.body.company, {
       name: 'ACME LIMITED',
       registrationNumber: '12345678',
       status: 'active',
@@ -251,7 +258,6 @@ test('maps a high-confidence Companies House match into structured company data'
       'companyType',
       'registeredAddress',
     ]) {
-      assert.equal(response.body.enrichment.confidence[field], 'high');
       assert.equal(response.body.enrichment.fields[field].confidence, 'high');
       assert.deepEqual(response.body.enrichment.fields[field].sources, [
         'Companies House',
@@ -277,12 +283,14 @@ test('returns partial data with a warning when Companies House has no usable mat
     });
 
     assert.equal(response.statusCode, 200);
-    assert.deepEqual(response.body.company, {
+    assert.deepEqual(response.body.input, {
+      email: 'founder@example.com',
       website: 'https://unknown-company.co.uk',
       domain: 'unknown-company.co.uk',
     });
+    assert.deepEqual(response.body.company, {});
     assert.deepEqual(response.body.enrichment.sources, []);
-    assert.deepEqual(response.body.enrichment.confidence, {});
+    assert.deepEqual(response.body.enrichment.fields, {});
     assert.match(
       response.body.enrichment.warnings[0],
       /No usable Companies House match found/
