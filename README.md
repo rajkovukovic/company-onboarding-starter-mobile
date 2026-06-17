@@ -301,6 +301,34 @@ Backend tests mock the Companies House HTTP calls and cover: validation errors, 
 
 ## What I'd Improve With More Time
 
+### Review step field validation
+
+The review step validates that required fields are non-empty, but does not enforce format rules:
+
+- **Postal code** — validate against a UK postcode regex (`/^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i`) since Companies House only covers UK companies; surface a warning rather than blocking if the pattern does not match, to handle edge cases like overseas registered addresses
+- **Registration number** — validate the UK Companies House format (8 digits, or 2 letters + 6 digits) with a soft warning when the user manually enters a value that does not match
+- **Company status** — currently a free-text field; should be a constrained picker (or segmented control) limited to the known Companies House status values: `active`, `dissolved`, `liquidation`, `administration`, `voluntary-arrangement`, `converted-closed`, `insolvency-proceedings`, `registered`, `removed`
+- **Incorporation date** — already a date picker (no change needed), but it currently allows future dates; adding a max-date of today would prevent obvious errors
+
+### Enrich UX: streaming, caching, and unstable internet
+
+The current flow blocks until all three enrichment sources complete (~3–8 s depending on whether OpenAI is enabled), then returns a single JSON response:
+
+- **Streaming status updates** — replace the single blocking response with server-sent events (SSE) or a simple chunked-JSON stream so the mobile app can show live progress: "Checking company website…" → "Looking up Companies House…" → "Done". This reduces perceived latency significantly since the website step often completes in under 500 ms while the CH or OpenAI steps are slower
+- **Domain-level caching** — cache enrichment results keyed by normalized domain (e.g. in Redis or a short-lived in-memory LRU) so that re-entering the same company website within a session or across users does not re-hit the external APIs; a 5-minute TTL would cover the vast majority of cases while keeping data fresh
+- **Retry and unstable internet** — add exponential-backoff retry for the `/enrich` call on the mobile side (the backend already returns partial data rather than failing hard, so retrying a timed-out request is safe); show a "Retrying…" state rather than a hard error on transient failures, and surface a "No internet connection" state when `navigator.onLine` / NetInfo reports offline
+
+### Restore original enriched value
+
+When a user edits a review field, the confidence pill changes to "Edited by you" and the enrichment source is hidden — but there is no way to revert. Adding a small "Restore" action next to each edited field (appearing only when the current value differs from the original enriched value) would let users undo accidental edits without having to re-run enrichment. The original enrichment result is already stored separately from `editedCompany` in the hook state, so the comparison is straightforward.
+
+### Edge case tests
+
+- **Mobile unit tests** — no tests exist for the mobile layer; adding tests for `validation.ts`, `persistence.ts`, and `company.ts` helpers with Jest + React Native Testing Library would catch regressions in the most critical non-UI logic
+- **Backend edge cases** — extend the existing suite with: website that returns HTML with multiple competing legal names; OpenAI returning a rejected name that matches a CH candidate; CH returning a dissolved company as the best match; postcode or address fields missing from a CH profile; enrichment called with an IP address instead of a domain
+
+### Other
+
 - **Real save endpoint** — wire `POST /companies` and remove the mock delay
 - **Email deep-link callback** — magic link flow with `expo-linking`, app scheme, and a backend token endpoint
 - **Retry on bad domain** — when the website is unreachable or returns no useful data, offer the user a prompt to correct the URL and re-enrich before advancing to review
