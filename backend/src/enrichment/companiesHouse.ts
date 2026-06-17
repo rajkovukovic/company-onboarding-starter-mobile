@@ -272,7 +272,7 @@ export async function enrichFromCompaniesHouse(
 
     const { searchTerm, bestMatch, companyNumber, nextMatch } = selected;
 
-    if (nextMatch && nextMatch.match.score > 0 && bestMatch.match.score < 100) {
+    if (nextMatch && nextMatch.match.confidence === 'high') {
       const runnerUp = nextMatch.item.title ?? nextMatch.item.company_number ?? 'unknown';
       const gap = bestMatch.match.score - nextMatch.match.score;
       response.enrichment.warnings?.push(
