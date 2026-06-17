@@ -454,3 +454,16 @@ export const styles = StyleSheet.create({
     color: palette.brand,
   },
 });
+
+export const slideStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    overflow: 'hidden',
+  },
+  screen: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  fill: {
+    flex: 1,
+  },
+});
