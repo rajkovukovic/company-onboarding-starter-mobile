@@ -256,10 +256,16 @@ export const styles = StyleSheet.create({
     backgroundColor: '#d97706',
   },
   confidenceDotLowActive: {
-    backgroundColor: '#dc2626',
+    backgroundColor: '#be123c',
   },
-  confidenceDotInactive: {
-    backgroundColor: '#e5e7eb',
+  confidenceDotHighInactive: {
+    backgroundColor: '#c4c0ed',
+  },
+  confidenceDotMediumInactive: {
+    backgroundColor: '#f0cc72',
+  },
+  confidenceDotLowInactive: {
+    backgroundColor: '#f9a8bc',
   },
   confidenceLabelHigh: {
     fontSize: 12,

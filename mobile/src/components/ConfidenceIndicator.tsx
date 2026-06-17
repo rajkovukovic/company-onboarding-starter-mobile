@@ -52,6 +52,12 @@ export function ConfidenceIndicator({
       ? styles.confidenceDotMediumActive
       : styles.confidenceDotLowActive;
 
+  const inactiveDotStyle = isHigh
+    ? styles.confidenceDotHighInactive
+    : isMedium
+      ? styles.confidenceDotMediumInactive
+      : styles.confidenceDotLowInactive;
+
   const labelStyle = isHigh
     ? styles.confidenceLabelHigh
     : isMedium
@@ -70,7 +76,7 @@ export function ConfidenceIndicator({
             key={i}
             style={[
               styles.confidenceDot,
-              i < activeDots ? activeDotStyle : styles.confidenceDotInactive,
+              i < activeDots ? activeDotStyle : inactiveDotStyle,
             ]}
           />
         ))}
