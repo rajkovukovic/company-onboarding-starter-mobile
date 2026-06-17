@@ -7,7 +7,7 @@ import type { WebsiteEvidence } from './website';
 
 const OPENAI_RESPONSES_URL = 'https://api.openai.com/v1/responses';
 const OPENAI_TIMEOUT_MS = 8000;
-const DEFAULT_OPENAI_MODEL = 'gpt-4o-mini';
+const DEFAULT_OPENAI_MODEL = 'gpt-5.4-mini';
 
 type WebsiteInterpretation = {
   companyName: string | null;

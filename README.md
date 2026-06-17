@@ -67,7 +67,7 @@ Copy `backend/.env.example` and fill in your keys.
 | `COMPANIES_HOUSE_API_KEY` | Yes (for registry data) | — | Get a free key at [developer.company-information.service.gov.uk](https://developer.company-information.service.gov.uk) |
 | `COMPANIES_HOUSE_BASE_URL` | No | `https://api.company-information.service.gov.uk` | Set to `https://api-sandbox.company-information.service.gov.uk` for test/sandbox applications. Sandbox keys authenticate successfully but return limited data. |
 | `OPENAI_API_KEY` | No | — | Enables LLM-assisted evidence interpretation. Enrichment works without it. |
-| `OPENAI_MODEL` | No | `gpt-4o-mini` | Override OpenAI model. |
+| `OPENAI_MODEL` | No | `gpt-5.4-mini` | Override OpenAI model. |
 | `ENRICHMENT_DEBUG_LOGGING` | No | `false` | Set to `true` to log Companies House and OpenAI payloads to the console. |
 | `PORT` | No | `3001` | Backend server port. |
 
@@ -99,7 +99,7 @@ This gives low-to-medium-confidence data when the registry lookup fails or finds
 
 ### 2. OpenAI evidence interpreter (optional)
 
-If `OPENAI_API_KEY` is set and the website fetch returned visible text, a structured prompt is sent to the OpenAI Responses API (`gpt-4o-mini` by default) asking it to pick the most likely company name and industry from the scraped evidence. It uses the same evidence the human would read — it doesn't invent facts. The interpreted company name becomes the first search term passed to Companies House.
+If `OPENAI_API_KEY` is set and the website fetch returned visible text, a structured prompt is sent to the OpenAI Responses API (`gpt-5.4-mini` by default) asking it to pick the most likely company name and industry from the scraped evidence. It uses the same evidence the human would read — it doesn't invent facts. The interpreted company name becomes the first search term passed to Companies House.
 
 This step is strictly an **evidence interpreter**: the LLM cannot set high-confidence fields or overwrite registry data.
 
